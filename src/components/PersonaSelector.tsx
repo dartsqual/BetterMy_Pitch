@@ -1,6 +1,7 @@
 "use client";
 
-import { PERSONAS, type Persona } from "@/lib/catalog";
+import { PERSONAS } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { UserPlus } from "lucide-react";
 
@@ -18,11 +19,17 @@ export function PersonaSelector({
   onChange: (p: PersonaDraft) => void;
   templates: PersonaTemplateDto[];
 }) {
-  const pick = (p: Persona | PersonaTemplateDto, id = p.id) =>
+  const { t } = useI18n();
+  const pick = (p: PersonaTemplateDto, id = p.id) =>
     onChange({ id, name: p.name, title: p.title, brief: p.brief });
 
   const options = [
-    ...PERSONAS.map((p) => ({ key: p.id, emoji: p.emoji, persona: p, id: p.id })),
+    ...PERSONAS.map((p) => ({
+      key: p.id,
+      emoji: p.emoji,
+      persona: { ...p, title: t.personas[p.id]?.title ?? p.title, brief: t.personas[p.id]?.brief ?? p.brief },
+      id: p.id,
+    })),
     ...templates.map((t) => ({ key: `tpl-${t.id}`, emoji: "⭐", persona: t, id: `tpl-${t.id}` })),
   ];
 
@@ -54,29 +61,29 @@ export function PersonaSelector({
             value.id === CUSTOM_ID ? "border-accent bg-accent-soft" : "border-border hover:border-accent/50",
           )}
         >
-          <UserPlus className="size-4" /> Custom persona
+          <UserPlus className="size-4" /> {t.config.customPersona}
         </button>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
         <input
-          aria-label="Buyer name"
-          placeholder="Buyer name"
+          aria-label={t.config.buyerName}
+          placeholder={t.config.buyerName}
           value={value.name}
           onChange={(e) => onChange({ ...value, name: e.target.value })}
           className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
         />
         <input
-          aria-label="Buyer role"
-          placeholder="Role, e.g. Head of Data"
+          aria-label={t.config.buyerRole}
+          placeholder={t.config.buyerRole}
           value={value.title}
           onChange={(e) => onChange({ ...value, title: e.target.value })}
           className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
         />
       </div>
       <textarea
-        aria-label="Buyer background"
-        placeholder="Background, priorities, typical objections…"
+        aria-label={t.config.buyerBrief}
+        placeholder={t.config.buyerBrief}
         value={value.brief}
         onChange={(e) => onChange({ ...value, brief: e.target.value })}
         rows={3}

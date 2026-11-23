@@ -1,6 +1,6 @@
 "use client";
 
-import { frameworkLabel } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n/client";
 import type { CoachHint } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 import { Loader2, Sparkles } from "lucide-react";
@@ -20,6 +20,7 @@ export function LiveCoachSidebar({
   onToggle: (on: boolean) => void;
   framework: string;
 }) {
+  const { t } = useI18n();
   const latest = hints[hints.length - 1];
   const earlier = hints.slice(0, -1).reverse();
 
@@ -27,21 +28,21 @@ export function LiveCoachSidebar({
     <aside className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card lg:min-h-0">
       <header className="flex items-center justify-between gap-3 border-b border-border p-4">
         <div>
-          <div className="text-xs uppercase tracking-wide text-muted">Live coach whisperer</div>
-          <div className="font-semibold">Only you can see this · {frameworkLabel(framework)}</div>
+          <div className="text-xs uppercase tracking-wide text-muted">{t.coach.title}</div>
+          <div className="font-semibold">{t.coach.onlyYou} · {t.frameworks[framework as keyof typeof t.frameworks]?.label ?? framework}</div>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
-          Coach
+          {t.coach.toggle}
         </label>
       </header>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {!enabled && <p className="text-sm text-muted">Coaching paused. Turn it back on to get cues after each buyer turn.</p>}
+        {!enabled && <p className="text-sm text-muted">{t.coach.paused}</p>}
 
         {enabled && thinking && (
           <div className="flex items-center gap-2 text-sm text-coach">
-            <Loader2 className="size-4 animate-spin" /> Reading the buyer…
+            <Loader2 className="size-4 animate-spin" /> {t.coach.reading}
           </div>
         )}
 
@@ -62,15 +63,13 @@ export function LiveCoachSidebar({
         ) : (
           enabled &&
           !thinking && (
-            <p className="text-sm text-muted">
-              Cues appear here after each buyer turn: what the buyer is signalling and how to pivot.
-            </p>
+            <p className="text-sm text-muted">{t.coach.empty}</p>
           )
         )}
 
         {earlier.length > 0 && (
           <div className="space-y-2">
-            <div className="text-xs uppercase tracking-wide text-muted">Earlier cues</div>
+            <div className="text-xs uppercase tracking-wide text-muted">{t.coach.earlier}</div>
             {earlier.map(({ messageId, hint }) => (
               <div key={messageId} className={cn("rounded-lg border border-border p-3 text-sm opacity-80")}>
                 <div className="font-medium">{hint.signal}</div>

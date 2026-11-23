@@ -1,6 +1,6 @@
 "use client";
 
-import { difficultyLabel, frameworkLabel } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n/client";
 import { canSpeak, getRecognitionCtor, stopSpeaking, type Recognition } from "@/lib/speech";
 import { cn } from "@/lib/utils";
 import { Flag, Loader2, Mic, MicOff, Send, Volume2, VolumeX } from "lucide-react";
@@ -35,6 +35,7 @@ export function ChatArena({
   scoring: boolean;
   onEndAndScore: () => void;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [listening, setListening] = useState(false);
   const [autoSend, setAutoSend] = useState(true);
@@ -96,13 +97,13 @@ export function ChatArena({
     <section className="flex min-h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:min-h-0">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-muted">Buyer simulator</div>
+          <div className="text-xs uppercase tracking-wide text-muted">{t.arena.buyerSimulator}</div>
           <div className="truncate font-semibold">
             {session.personaName} <span className="font-normal text-muted">· {session.personaTitle}</span>
           </div>
           <div className="mt-1 flex gap-1.5">
-            <Badge>{difficultyLabel(session.difficulty)}</Badge>
-            <Badge>{frameworkLabel(session.framework)}</Badge>
+            <Badge>{t.difficulties[session.difficulty as keyof typeof t.difficulties]?.label ?? session.difficulty}</Badge>
+            <Badge>{t.frameworks[session.framework as keyof typeof t.frameworks]?.label ?? session.framework}</Badge>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -115,15 +116,15 @@ export function ChatArena({
                 onVoiceOutChange(!voiceOut);
               }}
               aria-pressed={voiceOut}
-              title="Read buyer replies aloud"
+              title={t.arena.readAloud}
             >
               {voiceOut ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-              <span className="hidden sm:inline">Voice {voiceOut ? "on" : "off"}</span>
+              <span className="hidden sm:inline">{voiceOut ? t.arena.voiceOn : t.arena.voiceOff}</span>
             </Button>
           )}
           <Button variant="danger" size="sm" disabled={!canScore || scoring} onClick={onEndAndScore}>
             {scoring ? <Loader2 className="size-4 animate-spin" /> : <Flag className="size-4" />}
-            {scoring ? "Scoring…" : "End & Score Session"}
+            {scoring ? t.arena.scoring : t.arena.endAndScore}
           </Button>
         </div>
       </header>
@@ -146,7 +147,7 @@ export function ChatArena({
         ))}
         {buyerTyping && (
           <div className="flex items-center gap-2 text-sm text-muted">
-            <Loader2 className="size-4 animate-spin" /> {session.personaName} is thinking…
+            <Loader2 className="size-4 animate-spin" /> {session.personaName} {t.arena.thinking}
           </div>
         )}
         {error && <p className="rounded-lg bg-bad/10 p-3 text-sm text-bad">{error}</p>}
@@ -167,7 +168,7 @@ export function ChatArena({
               variant={listening ? "danger" : "outline"}
               onClick={toggleMic}
               aria-pressed={listening}
-              title={listening ? "Stop listening" : "Speak your reply"}
+              title={listening ? t.arena.stopListening : t.arena.speak}
               className="shrink-0"
             >
               {listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
@@ -183,17 +184,17 @@ export function ChatArena({
               }
             }}
             rows={2}
-            placeholder={listening ? "Listening…" : "Your reply to the buyer (Enter to send, Shift+Enter for a new line)"}
+            placeholder={listening ? t.arena.listening : t.arena.replyPlaceholder}
             className="min-h-10 flex-1 resize-none rounded-lg border border-border bg-background p-2.5 text-sm"
           />
-          <Button type="submit" disabled={!draft.trim() || buyerTyping} className="shrink-0" aria-label="Send">
+          <Button type="submit" disabled={!draft.trim() || buyerTyping} className="shrink-0" aria-label={t.arena.send}>
             <Send className="size-4" />
           </Button>
         </div>
         {micSupported && (
           <label className="mt-2 flex items-center gap-2 text-xs text-muted">
             <input type="checkbox" checked={autoSend} onChange={(e) => setAutoSend(e.target.checked)} />
-            Send automatically when I stop the mic
+            {t.arena.autoSend}
           </label>
         )}
       </form>

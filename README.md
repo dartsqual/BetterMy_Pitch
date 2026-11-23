@@ -12,6 +12,7 @@ Built for sales engineers, founders and account executives who want reps before 
 | **Roleplay arena** | Split screen. **Left:** the buyer simulator stays strictly in character, asks hard technical and commercial questions and raises realistic objections. **Right:** the live coach whisperer reads each buyer turn and suggests 1–2 tactical pivots. |
 | **Voice practice** | Browser Web Speech API: dictate your answers with the mic (optionally auto-sent) and have the buyer's replies read aloud. Needs Chrome or Edge; Safari support is partial. Text chat always works. |
 | **Scorecard & debrief** | "End & Score Session" runs the evaluator agent on the full transcript and the chosen framework. It returns schema-validated JSON: an overall readiness score (0–100); Discovery, Objection Handling, Value Articulation and Conciseness/Pacing scores; framework coverage; key moments; side-by-side rewrites; next drills. |
+| **Bilingual interface** | English and Brazilian Portuguese, switched with the **EN / PT-BR** selector in the header. The choice is saved in a cookie; on the first visit it follows the browser language. The practice language (buyer and feedback) follows the interface by default and can still be set per session. |
 | **History & progress** | Sessions, transcripts, coach cues and scorecards are stored in SQLite. The home page charts your readiness score over time. |
 
 ## Architecture
@@ -98,6 +99,7 @@ src/lib/prompts.ts              System prompts for Buyer, Coach, Evaluator
 src/lib/schemas.ts              zod input/output schemas
 src/lib/agents.ts               Buyer / Coach / Evaluator calls
 src/lib/llm/                    Provider layer (OpenRouter, Anthropic, Gemini, mock)
+src/lib/i18n/                   UI translations (en, pt) + locale cookie helpers
 tests/                          Vitest suites
 ```
 

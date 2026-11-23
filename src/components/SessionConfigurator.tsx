@@ -1,6 +1,8 @@
 "use client";
 
 import { DIFFICULTIES, FRAMEWORKS, LANGUAGES, PERSONAS } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n/client";
+import { dictionaries, type Locale } from "@/lib/i18n/dictionaries";
 import { cn } from "@/lib/utils";
 import { Loader2, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -10,19 +12,33 @@ import { Button, Card, SectionTitle } from "./ui";
 
 const first = PERSONAS[0];
 
+function builtInPersona(id: string, locale: Locale) {
+  const p = PERSONAS.find((x) => x.id === id);
+  const tr = dictionaries[locale].personas[id];
+  return p && tr ? { id, name: p.name, title: tr.title, brief: tr.brief } : null;
+}
+
 export function SessionConfigurator({ templates }: { templates: PersonaTemplateDto[] }) {
   const router = useRouter();
+  const { locale, t } = useI18n();
   const [product, setProduct] = useState("");
-  const [persona, setPersona] = useState<PersonaDraft>({
-    id: first.id,
-    name: first.name,
-    title: first.title,
-    brief: first.brief,
-  });
+  const [persona, setPersona] = useState<PersonaDraft>(() => builtInPersona(first.id, locale)!);
   const [difficulty, setDifficulty] = useState<string>("skeptical");
   const [framework, setFramework] = useState<string>("meddic");
   const [customFlow, setCustomFlow] = useState("");
-  const [language, setLanguage] = useState<string>("en");
+  const [language, setLanguage] = useState<string>(locale);
+  const [shownLocale, setShownLocale] = useState(locale);
+
+  // When the interface language changes, follow it with the practice language
+  // and re-translate an unedited built-in persona.
+  if (shownLocale !== locale) {
+    setShownLocale(locale);
+    setLanguage(locale);
+    const before = builtInPersona(persona.id, shownLocale);
+    if (before && before.title === persona.title && before.brief === persona.brief) {
+      setPersona({ ...builtInPersona(persona.id, locale)!, name: persona.name });
+    }
+  }
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +67,7 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not create the session");
+      if (!res.ok) throw new Error(data.error ?? t.config.createError);
       router.push(`/session/${data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -62,31 +78,31 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
   return (
     <form onSubmit={start} className="space-y-5">
       <Card className="space-y-3">
-        <SectionTitle>1 · What are you pitching?</SectionTitle>
+        <SectionTitle>{t.config.step1}</SectionTitle>
         <textarea
           required
           minLength={10}
           value={product}
           onChange={(e) => setProduct(e.target.value)}
           rows={5}
-          placeholder="Product, value proposition, pricing, proof points… You can paste your pitch deck notes here."
+          placeholder={t.config.productPlaceholder}
           className="w-full rounded-lg border border-border bg-background p-3 text-sm"
         />
       </Card>
 
       <Card className="space-y-3">
-        <SectionTitle>2 · Who are you pitching to?</SectionTitle>
+        <SectionTitle>{t.config.step2}</SectionTitle>
         <PersonaSelector value={persona} onChange={setPersona} templates={templates} />
         {isCustomPersona && (
           <label className="flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={saveAsTemplate} onChange={(e) => setSaveAsTemplate(e.target.checked)} />
-            Save this persona as a reusable template
+            {t.config.saveTemplate}
           </label>
         )}
       </Card>
 
       <Card className="space-y-4">
-        <SectionTitle>3 · How hard should it be?</SectionTitle>
+        <SectionTitle>{t.config.step3}</SectionTitle>
         <div className="grid gap-2 sm:grid-cols-3">
           {DIFFICULTIES.map((d) => (
             <button
@@ -98,13 +114,13 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
                 difficulty === d.id ? "border-accent bg-accent-soft" : "border-border hover:border-accent/50",
               )}
             >
-              <div className="text-sm font-medium">{d.label}</div>
-              <div className="mt-0.5 text-xs text-muted">{d.description}</div>
+              <div className="text-sm font-medium">{t.difficulties[d.id].label}</div>
+              <div className="mt-0.5 text-xs text-muted">{t.difficulties[d.id].description}</div>
             </button>
           ))}
         </div>
 
-        <SectionTitle>4 · Sales framework</SectionTitle>
+        <SectionTitle>{t.config.step4}</SectionTitle>
         <div className="grid gap-2 sm:grid-cols-2">
           {FRAMEWORKS.map((f) => (
             <button
@@ -116,8 +132,8 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
                 framework === f.id ? "border-accent bg-accent-soft" : "border-border hover:border-accent/50",
               )}
             >
-              <div className="text-sm font-medium">{f.label}</div>
-              <div className="mt-0.5 text-xs text-muted">{f.description}</div>
+              <div className="text-sm font-medium">{t.frameworks[f.id].label}</div>
+              <div className="mt-0.5 text-xs text-muted">{t.frameworks[f.id].description}</div>
             </button>
           ))}
         </div>
@@ -127,13 +143,13 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
             value={customFlow}
             onChange={(e) => setCustomFlow(e.target.value)}
             rows={4}
-            placeholder={"1. Agenda & goals\n2. Discovery: current process\n3. Demo: dashboard → alerting\n4. Pricing & next steps"}
+            placeholder={t.config.customFlowPlaceholder}
             className="w-full rounded-lg border border-border bg-background p-3 text-sm"
           />
         )}
 
         <div className="flex flex-wrap items-center gap-3">
-          <SectionTitle>Language</SectionTitle>
+          <SectionTitle>{t.config.practiceLanguage}</SectionTitle>
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
@@ -151,7 +167,7 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
       {error && <p className="rounded-lg bg-bad/10 p-3 text-sm text-bad">{error}</p>}
       <Button type="submit" size="lg" disabled={pending} className="w-full">
         {pending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-        Start practice session
+        {t.config.start}
       </Button>
     </form>
   );

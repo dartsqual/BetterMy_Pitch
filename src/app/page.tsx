@@ -1,8 +1,9 @@
 import { ProgressChart } from "@/components/ProgressChart";
 import { SessionConfigurator } from "@/components/SessionConfigurator";
 import { Badge, Card, SectionTitle } from "@/components/ui";
-import { difficultyLabel } from "@/lib/catalog";
 import { db } from "@/lib/db";
+import { intlLocale } from "@/lib/i18n/dictionaries";
+import { getDictionary } from "@/lib/i18n/server";
 import { scoreTone } from "@/lib/utils";
 import { connection } from "next/server";
 import Link from "next/link";
@@ -11,16 +12,9 @@ import { Suspense } from "react";
 export default function Home() {
   return (
     <div className="space-y-10">
-      <section className="max-w-3xl space-y-3">
-        <Badge>AI sales & demo coach</Badge>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Rehearse your pitch against a buyer who pushes back.
-        </h1>
-        <p className="text-muted">
-          Pick a buyer persona and a sales framework, run a live roleplay with silent coaching cues,
-          then get a scorecard with quote-level feedback and executive-ready rewrites.
-        </p>
-      </section>
+      <Suspense fallback={<div className="h-36" />}>
+        <Hero />
+      </Suspense>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section id="new" className="scroll-mt-20">
@@ -38,6 +32,17 @@ export default function Home() {
   );
 }
 
+async function Hero() {
+  const { t } = await getDictionary();
+  return (
+    <section className="max-w-3xl space-y-3">
+      <Badge>{t.home.badge}</Badge>
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{t.home.headline}</h1>
+      <p className="text-muted">{t.home.intro}</p>
+    </section>
+  );
+}
+
 async function Configurator() {
   await connection();
   const templates = await db.personaTemplate.findMany({ orderBy: { createdAt: "desc" }, take: 12 });
@@ -50,6 +55,7 @@ async function Configurator() {
 
 async function History() {
   await connection();
+  const { locale, t } = await getDictionary();
   const sessions = await db.session.findMany({
     orderBy: { createdAt: "desc" },
     take: 20,
@@ -64,17 +70,21 @@ async function History() {
   return (
     <>
       <Card className="space-y-3">
-        <SectionTitle>Your progress</SectionTitle>
+        <SectionTitle>{t.home.progress}</SectionTitle>
         {scored.length > 0 ? (
-          <ProgressChart points={scored} />
+          <ProgressChart
+            points={scored}
+            locale={intlLocale(locale)}
+            labels={{ latest: t.home.latest, best: t.home.best, scored: t.home.scored, chart: t.home.chartLabel }}
+          />
         ) : (
-          <p className="text-sm text-muted">Score your first session to start tracking readiness over time.</p>
+          <p className="text-sm text-muted">{t.home.progressEmpty}</p>
         )}
       </Card>
 
       <Card className="space-y-3">
-        <SectionTitle>Recent sessions</SectionTitle>
-        {sessions.length === 0 && <p className="text-sm text-muted">No sessions yet.</p>}
+        <SectionTitle>{t.home.recent}</SectionTitle>
+        {sessions.length === 0 && <p className="text-sm text-muted">{t.home.noSessions}</p>}
         <ul className="divide-y divide-border">
           {sessions.map((s) => (
             <li key={s.id}>
@@ -83,10 +93,14 @@ async function History() {
                 className="flex items-center justify-between gap-3 py-3 hover:opacity-80"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{s.title}</div>
+                  <div className="truncate text-sm font-medium">
+                    {s.title.split(" · ")[0]} ·{" "}
+                    {t.frameworks[s.framework as keyof typeof t.frameworks]?.label ?? s.framework}
+                  </div>
                   <div className="text-xs text-muted">
-                    {s.personaName} · {difficultyLabel(s.difficulty)} · {s._count.messages} turns ·{" "}
-                    {s.createdAt.toLocaleDateString()}
+                    {s.personaName} ·{" "}
+                    {t.difficulties[s.difficulty as keyof typeof t.difficulties]?.label ?? s.difficulty} ·{" "}
+                    {s._count.messages} {t.home.turns} · {s.createdAt.toLocaleDateString(intlLocale(locale))}
                   </div>
                 </div>
                 {s.scorecard ? (
@@ -94,7 +108,7 @@ async function History() {
                     {s.scorecard.overall}
                   </span>
                 ) : (
-                  <Badge>In progress</Badge>
+                  <Badge>{t.home.inProgress}</Badge>
                 )}
               </Link>
             </li>
