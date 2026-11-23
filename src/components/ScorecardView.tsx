@@ -1,10 +1,11 @@
 "use client";
 
+import { ACTION_ICON, type Member, type MemberState } from "@/lib/committee";
 import { useI18n } from "@/lib/i18n/client";
 import { intlLocale, type Dictionary } from "@/lib/i18n/dictionaries";
 import { CATEGORY_KEYS, type ScorecardReport } from "@/lib/schemas";
 import { cn, scoreTone } from "@/lib/utils";
-import { Check, Lightbulb, RotateCcw, ThumbsUp, TriangleAlert, X } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, Lightbulb, RotateCcw, ThumbsUp, TriangleAlert, Users, X } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, ScoreBar, SectionTitle } from "./ui";
 
@@ -18,6 +19,21 @@ type Meta = {
   turns: number;
 };
 
+type CommitteeOutcome = { member: Member; start: MemberState; end: MemberState }[];
+
+/** Message ids each quote was found in (null = not found in the transcript). */
+type Evidence = { moments: (string | null)[]; rewrites: (string | null)[] };
+
+/** Open the transcript and jump to a quoted line. */
+function showLine(id: string) {
+  const details = document.getElementById("transcript") as HTMLDetailsElement | null;
+  if (details) details.open = true;
+  const line = document.getElementById(`msg-${id}`);
+  line?.scrollIntoView({ behavior: "smooth", block: "center" });
+  line?.classList.add("bg-accent-soft");
+  setTimeout(() => line?.classList.remove("bg-accent-soft"), 2000);
+}
+
 function readinessLabel(score: number, t: Dictionary) {
   if (score >= 90) return t.scorecard.readiness.exceptional;
   if (score >= 75) return t.scorecard.readiness.ready;
@@ -29,15 +45,20 @@ export function ScorecardView({
   report,
   meta,
   transcript,
+  evidence,
+  committee,
 }: {
   report: ScorecardReport;
   meta: Meta;
-  transcript: { id: string; role: string; content: string }[];
+  transcript: { id: string; role: string; speaker: string | null; content: string }[];
+  evidence: Evidence;
+  committee: CommitteeOutcome;
 }) {
   const { locale, t } = useI18n();
   const frameworkName = t.frameworks[meta.framework as keyof typeof t.frameworks]?.label ?? meta.framework;
-  const strengths = report.keyMoments.filter((m) => m.type === "strength");
-  const misses = report.keyMoments.filter((m) => m.type === "missed_opportunity");
+  const moments = report.keyMoments.map((m, i) => ({ ...m, lineId: evidence.moments[i] ?? null }));
+  const strengths = moments.filter((m) => m.type === "strength");
+  const misses = moments.filter((m) => m.type === "missed_opportunity");
 
   return (
     <div className="space-y-6">
@@ -98,7 +119,7 @@ export function ScorecardView({
           </SectionTitle>
           {strengths.length === 0 && <p className="text-sm text-muted">{t.scorecard.noStrengths}</p>}
           {strengths.map((m, i) => (
-            <Moment key={i} quote={m.quote} speaker={t.scorecard[m.speaker]} insight={m.insight} tone="good" />
+            <Moment key={i} quote={m.quote} speaker={t.scorecard[m.speaker]} insight={m.insight} tone="good" lineId={m.lineId} />
           ))}
         </Card>
         <Card className="space-y-3">
@@ -107,10 +128,40 @@ export function ScorecardView({
           </SectionTitle>
           {misses.length === 0 && <p className="text-sm text-muted">{t.scorecard.noMisses}</p>}
           {misses.map((m, i) => (
-            <Moment key={i} quote={m.quote} speaker={t.scorecard[m.speaker]} insight={m.insight} tone="warn" />
+            <Moment key={i} quote={m.quote} speaker={t.scorecard[m.speaker]} insight={m.insight} tone="warn" lineId={m.lineId} />
           ))}
         </Card>
       </div>
+
+      {committee.length > 0 && (
+        <Card className="space-y-3">
+          <SectionTitle className="flex items-center gap-2">
+            <Users className="size-4 text-accent" /> {t.scorecard.committee}
+          </SectionTitle>
+          <p className="text-xs text-muted">{t.scorecard.committeeHint}</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            {committee.map(({ member, start, end }) => (
+              <div key={member.id} className="space-y-1.5 rounded-xl border border-border p-3 text-sm">
+                <div className="font-semibold">
+                  {member.emoji} {member.name}
+                </div>
+                <div className="text-xs text-muted">
+                  {ACTION_ICON[end.action]} {t.actions[end.action]}
+                </div>
+                <div className="flex gap-3 text-xs tabular-nums">
+                  <span>
+                    {t.room.interest} {start.interest}→<b className={scoreTone(end.interest)}>{end.interest}</b>
+                  </span>
+                  <span>
+                    {t.room.trust} {start.trust}→<b className={scoreTone(end.trust)}>{end.trust}</b>
+                  </span>
+                </div>
+                {end.reasoning && <p className="text-xs italic">“{end.reasoning}”</p>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="space-y-4">
         <SectionTitle>{t.scorecard.rewrites}</SectionTitle>
@@ -120,6 +171,7 @@ export function ScorecardView({
               <div className="rounded-xl border border-bad/30 bg-bad/5 p-3">
                 <div className="mb-1 text-xs font-semibold uppercase text-bad">{t.scorecard.youSaid}</div>
                 <p className="text-sm">“{r.original}”</p>
+                <EvidenceTag lineId={evidence.rewrites[i] ?? null} />
               </div>
               <div className="rounded-xl border border-good/30 bg-good/5 p-3">
                 <div className="mb-1 text-xs font-semibold uppercase text-good">{t.scorecard.executive}</div>
@@ -164,13 +216,13 @@ export function ScorecardView({
         </Card>
       </div>
 
-      <details className="rounded-2xl border border-border bg-card p-5">
+      <details id="transcript" className="rounded-2xl border border-border bg-card p-5">
         <summary className="cursor-pointer text-sm font-semibold">{t.scorecard.transcript}</summary>
         <div className="mt-4 space-y-2 text-sm">
           {transcript.map((m) => (
-            <p key={m.id}>
+            <p key={m.id} id={`msg-${m.id}`} className="scroll-mt-24 rounded transition-colors">
               <span className={cn("font-semibold", m.role === "seller" ? "text-accent" : "text-muted")}>
-                {m.role === "seller" ? t.scorecard.you : meta.personaName}:
+                {m.role === "seller" ? t.scorecard.you : (m.speaker ?? meta.personaName)}:
               </span>{" "}
               {m.content}
             </p>
@@ -187,11 +239,13 @@ function Moment({
   speaker,
   insight,
   tone,
+  lineId,
 }: {
   quote: string;
   speaker: string;
   insight: string;
   tone: "good" | "warn";
+  lineId: string | null;
 }) {
   return (
     <figure className={cn("border-l-2 pl-3", tone === "good" ? "border-good" : "border-warn")}>
@@ -199,6 +253,28 @@ function Moment({
       <figcaption className="mt-1 text-xs text-muted">
         <span className="font-medium uppercase">{speaker}</span> · {insight}
       </figcaption>
+      <EvidenceTag lineId={lineId} />
     </figure>
+  );
+}
+
+/** Shows whether a cited quote was found in the transcript, and links to it. */
+function EvidenceTag({ lineId }: { lineId: string | null }) {
+  const { t } = useI18n();
+  if (!lineId) {
+    return (
+      <span className="mt-1 inline-flex items-center gap-1 text-xs text-warn">
+        <CircleAlert className="size-3.5" /> {t.scorecard.unverified}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => showLine(lineId)}
+      className="mt-1 inline-flex items-center gap-1 text-xs text-good hover:underline"
+    >
+      <CircleCheck className="size-3.5" /> {t.scorecard.verified}
+    </button>
   );
 }

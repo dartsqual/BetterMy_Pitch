@@ -1,8 +1,10 @@
 import { ZodError } from "zod";
+import { currentStates, sessionMembers } from "./committee";
 import { db } from "./db";
 import { LLMConfigError } from "./llm";
 import { logger } from "./logger";
 import type { SessionContext, Turn } from "./prompts";
+import { BUYER_ACTIONS, type BuyerAction } from "./schemas";
 
 export class HttpError extends Error {
   constructor(
@@ -39,17 +41,33 @@ export async function readJson(req: Request) {
   }
 }
 
-/** Load a session with its transcript, or throw 404. */
+/** Load a session with its transcript and committee state, or throw 404. */
 export async function loadSession(sessionId: string) {
   const session = await db.session.findUnique({
     where: { id: sessionId },
-    include: { messages: { orderBy: { createdAt: "asc" } } },
+    include: {
+      messages: { orderBy: { createdAt: "asc" } },
+      decisions: { orderBy: [{ round: "asc" }, { createdAt: "asc" }] },
+    },
   });
   if (!session) throw new HttpError(404, "Session not found");
   const ctx: SessionContext = session;
-  const turns: Turn[] = session.messages.map((m) => ({
-    role: m.role === "buyer" ? "buyer" : "seller",
-    content: m.content,
-  }));
-  return { session, ctx, turns };
+  const members = sessionMembers(session);
+  const nameOf = new Map(members.map((m) => [m.id, m.name]));
+  const turns: Turn[] = session.messages.map((m) =>
+    m.role === "buyer"
+      ? { role: "buyer", content: m.content, speaker: (m.speaker && nameOf.get(m.speaker)) || members[0].name }
+      : { role: "seller", content: m.content },
+  );
+  const states = currentStates(
+    members,
+    session.difficulty,
+    session.decisions.map((d) => ({ ...d, action: toAction(d.action) })),
+  );
+  const round = session.decisions.reduce((max, d) => Math.max(max, d.round), -1) + 1;
+  return { session, ctx, turns, members, states, round };
+}
+
+export function toAction(value: string): BuyerAction {
+  return (BUYER_ACTIONS as readonly string[]).includes(value) ? (value as BuyerAction) : "neutral";
 }

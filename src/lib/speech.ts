@@ -42,6 +42,26 @@ export function speak(text: string, lang: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+/**
+ * Read several buyer lines in order, giving each committee member (by index)
+ * a different voice when the browser has several for the language, and a
+ * different pitch otherwise.
+ */
+export function speakLines(lines: { text: string; voice: number }[], lang: string) {
+  if (!canSpeak() || lines.length === 0) return;
+  window.speechSynthesis.cancel();
+  const prefix = lang.split("-")[0];
+  const all = window.speechSynthesis.getVoices();
+  const voices = all.filter((v) => v.lang === lang).concat(all.filter((v) => v.lang !== lang && v.lang.startsWith(prefix)));
+  for (const line of lines) {
+    const utterance = new SpeechSynthesisUtterance(line.text);
+    utterance.lang = lang;
+    if (voices.length > 0) utterance.voice = voices[line.voice % voices.length];
+    if (voices.length <= line.voice) utterance.pitch = [1, 0.8, 1.2][line.voice % 3];
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
 export function stopSpeaking() {
   if (canSpeak()) window.speechSynthesis.cancel();
 }

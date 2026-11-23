@@ -1,8 +1,11 @@
-import type { CoachHint, ScorecardReport } from "../schemas";
+import { MUST_SPEAK } from "../prompts";
+import type { BuyerAction, BuyerDecision, CoachHint, ScorecardReport } from "../schemas";
 import type { LLMProvider } from "./types";
 
 // Offline provider (LLM_PROVIDER="mock"): deterministic canned replies so the
-// full UI flow can be explored and tested without an API key.
+// full UI flow can be explored and tested without an API key. Buyer state
+// reacts to simple features of the seller's last line (questions, numbers,
+// length) so the meeting room visibly changes.
 
 const BUYER_LINES = [
   "Thanks for making time. I've got about twenty minutes — what problem do you think you solve for us?",
@@ -13,6 +16,58 @@ const BUYER_LINES = [
   "Okay. What would a sensible next step look like from your side?",
 ];
 
+const COLLEAGUE_LINES = [
+  "Let me jump in on that: what does the rollout cost us in people's time, not just licences?",
+  "I'm not convinced yet. Can you show me a number from a customer like us?",
+  "That answers part of it. Who on our side would have to own this day to day?",
+];
+
+function mockDecision(system: string, prompt: string): BuyerDecision {
+  const name = system.match(/You are (.+?), a real buyer/)?.[1] ?? "Buyer";
+  const mustSpeak = prompt.includes(MUST_SPEAK);
+  const prior = prompt.match(/interest (\d+)\/100, trust (\d+)\/100/);
+  const [interest0, trust0] = prior ? [Number(prior[1]), Number(prior[2])] : [45, 40];
+  const sellerLines = [...prompt.matchAll(/^SELLER: (.*)$/gm)].map((m) => m[1]);
+  const last = sellerLines[sellerLines.length - 1] ?? "";
+  const round = sellerLines.length;
+
+  let dInterest = -3;
+  let dTrust = 0;
+  const reasons: string[] = [];
+  if (!last) reasons.push("Opening the call; waiting to see what the seller brings.");
+  if (last.includes("?")) {
+    dInterest += 10;
+    reasons.push("The seller asked about our situation instead of pitching.");
+  }
+  if (/\d/.test(last)) {
+    dTrust += 8;
+    reasons.push("A concrete number made the claim more credible.");
+  }
+  if (last.length > 350) {
+    dInterest -= 12;
+    dTrust -= 5;
+    reasons.push("Long monologue; I lost the thread.");
+  }
+  if (last && reasons.length === 0) reasons.push("Generic answer, nothing specific to us.");
+
+  const interest = Math.min(100, Math.max(0, interest0 + (last ? dInterest : 0)));
+  const trust = Math.min(100, Math.max(0, trust0 + (last ? dTrust : 0)));
+  const action: BuyerAction = !last
+    ? "neutral"
+    : interest < 12 ? "leaves_meeting" : interest >= 80 ? "ready_to_buy" : interest >= 60 ? "leans_in"
+      : dTrust > 0 ? "takes_notes" : interest < 30 ? "checks_phone" : dInterest < 0 ? "crosses_arms" : "nods";
+  // Colleagues chime in on alternating rounds so the room feels alive.
+  const speaks = mustSpeak || (round + name.length) % 2 === 0;
+  const say = !speaks
+    ? ""
+    : action === "leaves_meeting"
+      ? "I'm going to drop off, this isn't a fit for us right now."
+      : mustSpeak
+        ? BUYER_LINES[round % BUYER_LINES.length]
+        : COLLEAGUE_LINES[round % COLLEAGUE_LINES.length];
+  return { say, addressedTo: "seller", action, interest, trust, reasoning: reasons.join(" ") };
+}
+
 export function mockProvider(): LLMProvider {
   return {
     name: "mock",
@@ -21,7 +76,8 @@ export function mockProvider(): LLMProvider {
       const buyerTurns = messages.filter((m) => m.role === "assistant").length;
       return BUYER_LINES[buyerTurns % BUYER_LINES.length];
     },
-    async json({ schemaName, prompt }) {
+    async json({ schemaName, prompt, system }) {
+      if (schemaName === "buyer_decision") return JSON.stringify(mockDecision(system, prompt));
       if (schemaName === "coach_hint") {
         const hint: CoachHint = {
           signal: "Testing differentiation and ROI before committing time",

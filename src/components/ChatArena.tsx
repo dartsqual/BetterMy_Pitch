@@ -8,7 +8,14 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ArenaSession } from "./SessionArena";
 import { Badge, Button } from "./ui";
 
-export type ChatMessage = { id: string; role: "seller" | "buyer"; content: string; createdAt: string };
+export type ChatMessage = {
+  id: string;
+  role: "seller" | "buyer";
+  /** Committee member id for buyer lines. */
+  speaker: string | null;
+  content: string;
+  createdAt: string;
+};
 
 const subscribeNoop = () => () => {};
 
@@ -23,17 +30,21 @@ export function ChatArena({
   canScore,
   scoring,
   onEndAndScore,
+  closed,
 }: {
   session: ArenaSession;
   messages: ChatMessage[];
   buyerTyping: boolean;
   error: string | null;
-  onSend: (text: string) => void;
+  /** Resolves to false if the round failed, so the draft can be restored. */
+  onSend: (text: string) => Promise<boolean>;
   voiceOut: boolean;
   onVoiceOutChange: (on: boolean) => void;
   canScore: boolean;
   scoring: boolean;
   onEndAndScore: () => void;
+  /** Everyone left the meeting: no more replies. */
+  closed: boolean;
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
@@ -53,11 +64,16 @@ export function ChatArena({
 
   useEffect(() => () => recognition.current?.stop(), []);
 
+  const nameOf = (id: string | null) =>
+    session.members.find((m) => m.id === id)?.name ?? session.members[0]?.name ?? "";
+
   function submit(text = draft) {
     const value = text.trim();
-    if (!value || buyerTyping) return;
-    onSend(value);
+    if (!value || buyerTyping || closed) return;
     setDraft("");
+    void onSend(value).then((ok) => {
+      if (!ok) setDraft((d) => d || value);
+    });
   }
 
   function toggleMic() {
@@ -99,7 +115,10 @@ export function ChatArena({
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-muted">{t.arena.buyerSimulator}</div>
           <div className="truncate font-semibold">
-            {session.personaName} <span className="font-normal text-muted">· {session.personaTitle}</span>
+            {session.members.map((m) => m.name).join(", ")}
+            {session.members.length === 1 && (
+              <span className="font-normal text-muted"> · {session.members[0].title}</span>
+            )}
           </div>
           <div className="mt-1 flex gap-1.5">
             <Badge>{t.difficulties[session.difficulty as keyof typeof t.difficulties]?.label ?? session.difficulty}</Badge>
@@ -139,7 +158,7 @@ export function ChatArena({
               )}
             >
               {m.role === "buyer" && (
-                <div className="mb-0.5 text-xs font-medium text-muted">{session.personaName}</div>
+                <div className="mb-0.5 text-xs font-medium text-muted">{nameOf(m.speaker)}</div>
               )}
               {m.content}
             </div>
@@ -147,7 +166,8 @@ export function ChatArena({
         ))}
         {buyerTyping && (
           <div className="flex items-center gap-2 text-sm text-muted">
-            <Loader2 className="size-4 animate-spin" /> {session.personaName} {t.arena.thinking}
+            <Loader2 className="size-4 animate-spin" />{" "}
+            {session.members.length > 1 ? t.room.reacting : `${session.members[0].name} ${t.arena.thinking}`}
           </div>
         )}
         {error && <p className="rounded-lg bg-bad/10 p-3 text-sm text-bad">{error}</p>}
@@ -167,6 +187,7 @@ export function ChatArena({
               type="button"
               variant={listening ? "danger" : "outline"}
               onClick={toggleMic}
+              disabled={closed}
               aria-pressed={listening}
               title={listening ? t.arena.stopListening : t.arena.speak}
               className="shrink-0"
@@ -184,10 +205,11 @@ export function ChatArena({
               }
             }}
             rows={2}
+            disabled={closed}
             placeholder={listening ? t.arena.listening : t.arena.replyPlaceholder}
             className="min-h-10 flex-1 resize-none rounded-lg border border-border bg-background p-2.5 text-sm"
           />
-          <Button type="submit" disabled={!draft.trim() || buyerTyping} className="shrink-0" aria-label={t.arena.send}>
+          <Button type="submit" disabled={!draft.trim() || buyerTyping || closed} className="shrink-0" aria-label={t.arena.send}>
             <Send className="size-4" />
           </Button>
         </div>
