@@ -1,0 +1,123 @@
+name: Page on-call
+description: >
+  Adapter de acionamento de on-call. Dispara (trigger) ou encerra (resolve) o
+  acionamento no provedor configurado — GoAlert, PagerDuty ou Opsgenie — atrás
+  de um contrato único. Trocar de provedor por cliente = trocar a variável
+  PAGING_PROVIDER e os secrets PAGING_KEY/PAGING_ENDPOINT do repositório; os
+  workflows não mudam. O escalonamento (quem é acionado, cadeia, repetição)
+  vive na política do provedor — este action dispara uma vez e confia nela.
+
+inputs:
+  action:
+    description: "trigger ou resolve"
+    required: true
+  summary:
+    description: "Texto curto do acionamento (título da issue)"
+    required: true
+  severity:
+    description: "sev1 | sev2 | sev3 | sev4"
+    default: sev3
+  dedup-key:
+    description: "Chave idempotente do acionamento (ex.: org/repo#123)"
+    required: true
+  url:
+    description: "Link para a issue do incidente"
+    default: ""
+  provider:
+    description: "goalert | pagerduty | opsgenie | none"
+    required: true
+  endpoint:
+    description: "Base URL do provedor (obrigatório p/ GoAlert; nos demais usa o endpoint oficial)"
+    default: ""
+  key:
+    description: "Credencial: token da Generic API (GoAlert), routing key Events v2 (PagerDuty) ou GenieKey (Opsgenie)"
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        ACTION: ${{ inputs.action }}
+        SUMMARY: ${{ inputs.summary }}
+        SEVERITY: ${{ inputs.severity }}
+        DEDUP: ${{ inputs['dedup-key'] }}
+        LINK: ${{ inputs.url }}
+        PROVIDER: ${{ inputs.provider }}
+        ENDPOINT: ${{ inputs.endpoint }}
+        KEY: ${{ inputs.key }}
+      run: |
+        set -euo pipefail
+
+        if [ "$PROVIDER" = "none" ] || [ -z "$PROVIDER" ]; then
+          echo "PAGING_PROVIDER não configurado — acionamento de on-call desativado neste repo."
+          exit 0
+        fi
+        : "${KEY:?PAGING_KEY é obrigatório quando PAGING_PROVIDER=$PROVIDER}"
+
+        # resolve é best-effort: alerta já fechado/inexistente não derruba o workflow
+        soft_fail() {
+          if [ "$ACTION" = "resolve" ]; then
+            echo "::warning::resolve no $PROVIDER falhou (acionamento já resolvido?)"
+            exit 0
+          fi
+          exit 1
+        }
+
+        case "$PROVIDER" in
+          goalert)
+            : "${ENDPOINT:?PAGING_ENDPOINT (URL base do GoAlert) é obrigatório para goalert}"
+            EXTRA=()
+            [ "$ACTION" = "resolve" ] && EXTRA=(--data-urlencode "action=close")
+            curl -fsS -X POST "$ENDPOINT/api/v2/generic/incoming?token=$KEY" \
+              --data-urlencode "summary=[${SEVERITY^^}] $SUMMARY" \
+              --data-urlencode "details=$LINK" \
+              --data-urlencode "dedup=$DEDUP" \
+              "${EXTRA[@]}" || soft_fail
+            ;;
+
+          pagerduty)
+            case "$SEVERITY" in
+              sev1) PD_SEV=critical ;;
+              sev2) PD_SEV=error ;;
+              sev3) PD_SEV=warning ;;
+              *)    PD_SEV=info ;;
+            esac
+            [ "$ACTION" = "resolve" ] && EVENT=resolve || EVENT=trigger
+            jq -n --arg rk "$KEY" --arg ev "$EVENT" --arg dk "$DEDUP" \
+                  --arg s "$SUMMARY" --arg sev "$PD_SEV" --arg url "$LINK" \
+              '{routing_key: $rk, event_action: $ev, dedup_key: $dk,
+                payload: {summary: $s, severity: $sev, source: "nocpilot"},
+                links: (if $url == "" then [] else [{href: $url, text: "Issue do incidente"}] end)}' \
+            | curl -fsS -X POST "${ENDPOINT:-https://events.pagerduty.com}/v2/enqueue" \
+                -H "Content-Type: application/json" -d @- || soft_fail
+            ;;
+
+          opsgenie)
+            BASE="${ENDPOINT:-https://api.opsgenie.com}"
+            if [ "$ACTION" = "resolve" ]; then
+              ALIAS=$(jq -rn --arg x "$DEDUP" '$x | @uri')
+              curl -fsS -X POST "$BASE/v2/alerts/$ALIAS/close?identifierType=alias" \
+                -H "Authorization: GenieKey $KEY" \
+                -H "Content-Type: application/json" \
+                -d '{"source": "nocpilot"}' || soft_fail
+            else
+              case "$SEVERITY" in
+                sev1) PRIO=P1 ;;
+                sev2) PRIO=P2 ;;
+                sev3) PRIO=P3 ;;
+                *)    PRIO=P4 ;;
+              esac
+              jq -n --arg m "$SUMMARY" --arg a "$DEDUP" --arg d "$LINK" --arg p "$PRIO" \
+                '{message: $m, alias: $a, description: $d, priority: $p, source: "nocpilot"}' \
+              | curl -fsS -X POST "$BASE/v2/alerts" \
+                  -H "Authorization: GenieKey $KEY" \
+                  -H "Content-Type: application/json" -d @- || soft_fail
+            fi
+            ;;
+
+          *)
+            echo "::error::PAGING_PROVIDER '$PROVIDER' desconhecido (use goalert | pagerduty | opsgenie | none)"
+            exit 1
+            ;;
+        esac

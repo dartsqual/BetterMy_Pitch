@@ -1,0 +1,95 @@
+name: Incident commands
+
+# Comandos por comentário na issue do incidente:
+#   /mitigated  — marca o impacto como mitigado
+#   /resolve    — fecha o incidente
+#   /postmortem — cria a issue de postmortem como sub-issue do incidente
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  commands:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'incident') &&
+      startsWith(github.event.comment.body, '/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        id: cmd
+        with:
+          script: |
+            core.setOutput('resolved', 'false');
+            const cmd = context.payload.comment.body.trim().split(/\s+/)[0].toLowerCase();
+            const issue = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            };
+
+            if (cmd === '/mitigated') {
+              await github.rest.issues.addLabels({ ...issue, labels: ['mitigated'] });
+              await github.rest.issues.createComment({
+                ...issue,
+                body: `✅ Impacto mitigado por @${context.actor}. Causa raiz e correção definitiva pendentes.`,
+              });
+            }
+
+            if (cmd === '/resolve') {
+              await github.rest.issues.createComment({
+                ...issue,
+                body: `🏁 Resolvido por @${context.actor}. Para Sev1/Sev2, rode \`/postmortem\` antes de arquivar.`,
+              });
+              await github.rest.issues.update({ ...issue, state: 'closed', state_reason: 'completed' });
+              // Fechamento via GITHUB_TOKEN não dispara o incident-paging.yml
+              // (prevenção de recursão) — o resolve do on-call sai daqui.
+              core.setOutput('resolved', 'true');
+            }
+
+            if (cmd === '/postmortem') {
+              const parent = context.payload.issue;
+              const { data: pm } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Postmortem: ${parent.title}`,
+                labels: ['postmortem'],
+                body: [
+                  `Postmortem do incidente #${parent.number}.`,
+                  '',
+                  '## Resumo',
+                  '',
+                  '## Linha do tempo',
+                  '',
+                  '## Causa raiz',
+                  '',
+                  '## O que funcionou / o que não funcionou',
+                  '',
+                  '## Ações corretivas',
+                  '- [ ] ',
+                ].join('\n'),
+              });
+              await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...issue,
+                sub_issue_id: pm.id,
+              });
+              await github.rest.issues.createComment({ ...issue, body: `📝 Postmortem criado: #${pm.number}` });
+            }
+
+      - uses: actions/checkout@v4
+        if: steps.cmd.outputs.resolved == 'true'
+
+      - name: Resolver o acionamento no on-call
+        if: steps.cmd.outputs.resolved == 'true'
+        uses: ./.github/actions/page-oncall
+        with:
+          action: resolve
+          summary: ${{ github.event.issue.title }}
+          dedup-key: ${{ github.repository }}#${{ github.event.issue.number }}
+          provider: ${{ vars.PAGING_PROVIDER || 'none' }}
+          endpoint: ${{ vars.PAGING_ENDPOINT || '' }}
+          key: ${{ secrets.PAGING_KEY || '' }}

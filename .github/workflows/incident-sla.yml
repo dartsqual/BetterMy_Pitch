@@ -1,0 +1,45 @@
+name: Incident SLA reminder
+
+# Cobra atualização de status em incidentes abertos sem movimentação.
+# O próprio lembrete atualiza o updated_at da issue, então ele se auto-limita:
+# no máximo 1 cobrança por janela de SLA.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const HOURS_WITHOUT_UPDATE = { sev1: 1, sev2: 4 };
+            const now = Date.now();
+
+            for (const [sev, hours] of Object.entries(HOURS_WITHOUT_UPDATE)) {
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: `incident,${sev}`,
+                per_page: 100,
+              });
+
+              for (const issue of issues) {
+                const idleMs = now - new Date(issue.updated_at).getTime();
+                if (idleMs > hours * 3600 * 1000) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    body: `⏰ Incidente ${sev} sem atualização há mais de ${hours}h. Poste um status update.`,
+                  });
+                }
+              }
+            }

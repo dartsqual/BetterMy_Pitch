@@ -1,0 +1,32 @@
+name: Incident paging sync
+
+# Encerra o acionamento no provedor de on-call quando o incidente é fechado
+# manualmente (pela UI/API, fora do /resolve). Fechamentos via /resolve são
+# resolvidos pelo próprio incident-commands.yml — issues fechadas com
+# GITHUB_TOKEN não disparam este workflow (prevenção de recursão do Actions),
+# por isso os dois caminhos coexistem. O resolve é idempotente/best-effort:
+# resolver duas vezes não tem efeito.
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-page:
+    if: contains(github.event.issue.labels.*.name, 'incident')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolver o acionamento no on-call
+        uses: ./.github/actions/page-oncall
+        with:
+          action: resolve
+          summary: ${{ github.event.issue.title }}
+          dedup-key: ${{ github.repository }}#${{ github.event.issue.number }}
+          provider: ${{ vars.PAGING_PROVIDER || 'none' }}
+          endpoint: ${{ vars.PAGING_ENDPOINT || '' }}
+          key: ${{ secrets.PAGING_KEY || '' }}

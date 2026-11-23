@@ -1,0 +1,42 @@
+name: "📝 Postmortem"
+description: Análise pós-incidente (blameless)
+title: "Postmortem: "
+labels: ["postmortem"]
+body:
+  - type: input
+    id: incident
+    attributes:
+      label: Incidente relacionado
+      placeholder: "#123"
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Resumo
+    validations:
+      required: true
+  - type: textarea
+    id: timeline
+    attributes:
+      label: Linha do tempo
+      placeholder: |
+        14:30 — alerta disparou
+        14:35 — incidente aberto
+        15:10 — mitigado
+    validations:
+      required: true
+  - type: textarea
+    id: root-cause
+    attributes:
+      label: Causa raiz
+    validations:
+      required: true
+  - type: textarea
+    id: actions
+    attributes:
+      label: Ações corretivas
+      description: Uma por linha; depois transforme cada uma em sub-issue do incidente.
+      placeholder: "- [ ] ..."
+    validations:
+      required: true

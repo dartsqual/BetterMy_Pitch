@@ -1,0 +1,54 @@
+name: "🚨 Incidente"
+description: Reportar um incidente em produção
+title: "[INC] "
+labels: ["incident", "triage"]
+# Requer o issue type "Incident" criado na organização (Settings → Planning → Issue types).
+# Se a org ainda não tiver o tipo, remova a linha abaixo.
+type: Incident
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severidade
+      description: "Sev1: indisponibilidade total · Sev2: degradação severa · Sev3: degradação parcial · Sev4: sem impacto em cliente"
+      options:
+        - Sev1
+        - Sev2
+        - Sev3
+        - Sev4
+    validations:
+      required: true
+  - type: dropdown
+    id: service
+    attributes:
+      label: Serviço afetado
+      options:
+        - API
+        - Portal
+        - Integrações
+        - Infraestrutura
+        - Outro
+    validations:
+      required: true
+  - type: input
+    id: started-at
+    attributes:
+      label: Início do impacto
+      description: Quando o problema começou? (data/hora com fuso)
+      placeholder: "2026-07-11 14:30 BRT"
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto observado
+      description: O que está quebrado? Quantos usuários/clientes afetados? Existe workaround?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidências e links
+      description: Prints, logs, dashboards, alertas.
+    validations:
+      required: false
