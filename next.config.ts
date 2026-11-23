@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Loaded at runtime (not bundled) so the Datadog tracer can instrument them.
+  serverExternalPackages: ["dd-trace", "pino"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

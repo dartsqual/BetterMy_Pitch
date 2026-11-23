@@ -1,6 +1,7 @@
 import { errorResponse, readJson } from "@/lib/api";
 import { frameworkLabel } from "@/lib/catalog";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { CreateSessionInput } from "@/lib/schemas";
 
 // POST /api/sessions — create a practice session from the configurator.
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
         language: input.language,
       },
     });
+    logger.info({ practice_session_id: session.id, persona: input.personaId, difficulty: input.difficulty, framework: input.framework, language: input.language }, "practice session created");
     return Response.json({ id: session.id }, { status: 201 });
   } catch (err) {
     return errorResponse(err);

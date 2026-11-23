@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense, type ReactNode } from "react";
+import { DatadogRum, type RumConfig } from "@/components/DatadogRum";
 import { SiteHeader } from "@/components/SiteHeader";
 import { I18nProvider } from "@/lib/i18n/client";
 import { getLocale } from "@/lib/i18n/server";
@@ -30,8 +31,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 /** Reads the locale cookie at request time and provides translations to the app. */
 async function LocalizedShell({ children }: { children: ReactNode }) {
   const locale = await getLocale();
+  const rum: RumConfig | null =
+    process.env.DD_RUM_APPLICATION_ID && process.env.DD_RUM_CLIENT_TOKEN
+      ? {
+          applicationId: process.env.DD_RUM_APPLICATION_ID,
+          clientToken: process.env.DD_RUM_CLIENT_TOKEN,
+          site: process.env.DD_SITE ?? "datadoghq.com",
+          env: process.env.DD_ENV ?? "dev",
+          version: process.env.DD_VERSION ?? "dev",
+        }
+      : null;
   return (
     <I18nProvider locale={locale}>
+      <DatadogRum config={rum} />
       <SiteHeader />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">{children}</main>
     </I18nProvider>

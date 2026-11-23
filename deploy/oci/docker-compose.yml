@@ -1,0 +1,124 @@
+# BetterMy Pitch on OCI: app + Caddy (HTTPS) + Datadog Agent (full monitoring).
+# Secrets live outside git on the VM: /opt/bmp/dd.env (DD_API_KEY, DD_SITE)
+# and /opt/bmp/app.env (OPENROUTER_API_KEY, DD_RUM_*). Both chmod 600.
+name: bmp
+
+x-dd-tags: &dd-tags
+  com.datadoghq.tags.env: ${DD_ENV:-prod}
+  com.datadoghq.tags.version: ${APP_VERSION:-dev}
+
+services:
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:7
+    container_name: datadog-agent
+    restart: unless-stopped
+    env_file: /opt/bmp/dd.env
+    labels:
+      <<: *dd-tags
+      com.datadoghq.tags.service: datadog-agent
+    environment:
+      DD_ENV: ${DD_ENV:-prod}
+      DD_HOSTNAME: oci-bmp-01
+      DD_TAGS: "cloud_provider:oci region:sa-saopaulo-1 team:sunny-systems app:bettermy-pitch env:${DD_ENV:-prod}"
+      # APM + DogStatsD (from the app container)
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      # Logs from every container
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+      DD_CONTAINER_EXCLUDE_LOGS: "name:datadog-agent"
+      # Live processes & containers
+      DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED: "true"
+      DD_PROCESS_CONFIG_CONTAINER_COLLECTION_ENABLED: "true"
+      # eBPF: Cloud Network Monitoring, Universal Service Monitoring, Workload Protection
+      DD_SYSTEM_PROBE_NETWORK_ENABLED: "true"
+      DD_SERVICE_MONITORING_CONFIG_ENABLED: "true"
+      DD_RUNTIME_SECURITY_CONFIG_ENABLED: "true"
+      DD_RUNTIME_SECURITY_CONFIG_REMOTE_CONFIGURATION_ENABLED: "true"
+      # Misconfigurations + vulnerabilities (host and container images)
+      DD_COMPLIANCE_CONFIG_ENABLED: "true"
+      DD_COMPLIANCE_CONFIG_HOST_BENCHMARKS_ENABLED: "true"
+      DD_SBOM_ENABLED: "true"
+      DD_SBOM_CONTAINER_IMAGE_ENABLED: "true"
+      DD_SBOM_HOST_ENABLED: "true"
+      DD_CONTAINER_IMAGE_ENABLED: "true"
+      DD_REMOTE_CONFIGURATION_ENABLED: "true"
+      DD_INVENTORIES_CONFIGURATION_ENABLED: "true"
+      HOST_ROOT: /host/root
+    pid: host
+    cgroup: host
+    security_opt: [apparmor:unconfined]
+    cap_add: [SYS_ADMIN, SYS_RESOURCE, SYS_PTRACE, NET_ADMIN, NET_BROADCAST, NET_RAW, IPC_LOCK, CHOWN, DAC_READ_SEARCH, BPF, PERFMON]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /opt/datadog-agent/run:/opt/datadog-agent/run:rw
+      - /sys/kernel/debug:/sys/kernel/debug
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /:/host/root:ro
+
+  app:
+    build:
+      context: /opt/bmp/src
+      args:
+        DD_GIT_COMMIT_SHA: ${APP_VERSION:-unknown}
+    image: bettermy-pitch:${APP_VERSION:-latest}
+    container_name: bettermy-pitch
+    restart: unless-stopped
+    depends_on: [datadog-agent]
+    env_file: /opt/bmp/app.env
+    environment:
+      DATABASE_URL: file:/data/bmp.db
+      LLM_PROVIDER: openrouter
+      DD_AGENT_HOST: datadog-agent
+      DD_ENV: ${DD_ENV:-prod}
+      DD_SERVICE: bettermy-pitch
+      DD_VERSION: ${APP_VERSION:-dev}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_LOGS_INJECTION: "true"
+      DD_RUNTIME_METRICS_ENABLED: "true"
+      DD_PROFILING_ENABLED: "true"
+      DD_LLMOBS_ENABLED: "1"
+      DD_LLMOBS_ML_APP: bettermy-pitch
+      DD_APPSEC_ENABLED: "true"
+      DD_IAST_ENABLED: "true"
+      DD_APPSEC_SCA_ENABLED: "true"
+      DD_DATA_STREAMS_ENABLED: "false"
+      DD_TAGS: "team:sunny-systems,cloud_provider:oci,app:bettermy-pitch"
+    labels:
+      <<: *dd-tags
+      com.datadoghq.tags.service: bettermy-pitch
+      com.datadoghq.ad.logs: '[{"source":"nodejs","service":"bettermy-pitch"}]'
+    volumes:
+      - bmp-data:/data
+    expose: ["3000"]
+
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS}
+    labels:
+      <<: *dd-tags
+      com.datadoghq.tags.service: caddy
+      com.datadoghq.ad.logs: '[{"source":"caddy","service":"caddy"}]'
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  bmp-data:
+  caddy-data:
+  caddy-config:

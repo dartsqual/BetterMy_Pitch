@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import { db } from "./db";
 import { LLMConfigError } from "./llm";
+import { logger } from "./logger";
 import type { SessionContext, Turn } from "./prompts";
 
 export class HttpError extends Error {
@@ -21,8 +22,11 @@ export function errorResponse(err: unknown) {
     );
   }
   if (err instanceof HttpError) return Response.json({ error: err.message }, { status: err.status });
-  if (err instanceof LLMConfigError) return Response.json({ error: err.message }, { status: 503 });
-  console.error(err);
+  if (err instanceof LLMConfigError) {
+    logger.error({ err }, "llm provider not configured");
+    return Response.json({ error: err.message }, { status: 503 });
+  }
+  logger.error({ err }, "ai request failed");
   const message = err instanceof Error ? err.message : "Unexpected error";
   return Response.json({ error: `AI request failed: ${message}` }, { status: 502 });
 }

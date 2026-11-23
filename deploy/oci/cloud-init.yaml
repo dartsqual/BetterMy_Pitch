@@ -1,0 +1,14 @@
+#cloud-config
+# Ubuntu 24.04 on OCI: Docker + open 80/443 in the image's iptables. No secrets here.
+package_update: true
+packages: [git, ca-certificates, curl, rsync]
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - usermod -aG docker ubuntu
+  - mkdir -p /opt/bmp/src /opt/datadog-agent/run
+  - chown -R ubuntu:ubuntu /opt/bmp
+  - iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+  - iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+  - iptables -I INPUT 6 -m state --state NEW -p udp --dport 443 -j ACCEPT
+  - netfilter-persistent save
+  - touch /var/lib/cloud/instance/bmp-ready

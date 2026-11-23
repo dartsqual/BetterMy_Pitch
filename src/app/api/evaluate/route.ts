@@ -1,6 +1,7 @@
 import { evaluateSession } from "@/lib/agents";
 import { errorResponse, HttpError, loadSession, readJson } from "@/lib/api";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { SessionIdInput } from "@/lib/schemas";
 
 // POST /api/evaluate — end the session and generate the structured scorecard.
@@ -24,6 +25,10 @@ export async function POST(req: Request) {
       where: { id: session.id },
       data: { status: "scored", endedAt: new Date() },
     });
+    logger.info(
+      { practice_session_id: sessionId, readiness_score: report.overallScore, turns: turns.length, model },
+      "practice session scored",
+    );
     return Response.json({ scorecardId: scorecard.id, sessionId });
   } catch (err) {
     return errorResponse(err);

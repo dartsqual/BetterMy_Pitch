@@ -7,6 +7,8 @@ import {
 } from "./catalog";
 
 export type SessionContext = {
+  /** Practice session id (used to group LLM Observability traces). */
+  id?: string;
   product: string;
   personaName: string;
   personaBrief: string;

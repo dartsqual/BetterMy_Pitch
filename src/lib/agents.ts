@@ -9,6 +9,7 @@ import {
   type SessionContext,
   type Turn,
 } from "./prompts";
+import { submitScores, traceAgent } from "./observability";
 import { CoachHint, ScorecardReport } from "./schemas";
 
 /** Map transcript turns to chat messages from the buyer model's point of view. */
@@ -27,37 +28,70 @@ export function toBuyerMessages(turns: Turn[]): ChatMessage[] {
 
 export async function buyerReply(ctx: SessionContext, turns: Turn[], provider?: LLMProvider) {
   const p = provider ?? getProvider();
-  const reply = await p.chat({
-    system: buyerSystemPrompt(ctx),
-    messages: toBuyerMessages(turns),
-    tier: "chat",
-    maxTokens: 350,
-  });
+  const lastSeller = [...turns].reverse().find((t) => t.role === "seller")?.content ?? "(opening)";
+  const reply = await traceAgent("buyer", { sessionId: ctx.id ?? "unknown", input: lastSeller, tags: sessionTags(ctx) }, () =>
+    p.chat({
+      system: buyerSystemPrompt(ctx),
+      messages: toBuyerMessages(turns),
+      tier: "chat",
+      maxTokens: 350,
+    }),
+  );
   return reply || "Sorry — could you say that again?";
 }
 
+function sessionTags(ctx: SessionContext) {
+  return {
+    persona: ctx.personaName,
+    difficulty: ctx.difficulty,
+    framework: ctx.framework,
+    language: ctx.language,
+  };
+}
+
 export async function coachHint(ctx: SessionContext, turns: Turn[], provider?: LLMProvider) {
-  return generateObject({
-    provider,
-    system: coachSystemPrompt(ctx),
-    prompt: `Conversation so far:\n${formatTranscript(turns.slice(-12), ctx)}\n\nCoach the seller's next reply.`,
-    schema: CoachHint,
-    schemaName: "coach_hint",
-    tier: "chat",
-    maxTokens: 400,
-  });
+  const lastBuyer = [...turns].reverse().find((t) => t.role === "buyer")?.content ?? "";
+  return traceAgent("coach", { sessionId: ctx.id ?? "unknown", input: lastBuyer, tags: sessionTags(ctx) }, () =>
+    generateObject({
+      provider,
+      system: coachSystemPrompt(ctx),
+      prompt: `Conversation so far:\n${formatTranscript(turns.slice(-12), ctx)}\n\nCoach the seller's next reply.`,
+      schema: CoachHint,
+      schemaName: "coach_hint",
+      tier: "chat",
+      maxTokens: 400,
+    }),
+  );
 }
 
 export async function evaluateSession(ctx: SessionContext, turns: Turn[], provider?: LLMProvider) {
   const p = provider ?? getProvider();
-  const report = await generateObject({
-    provider: p,
-    system: evaluatorSystemPrompt(ctx),
-    prompt: `Full transcript:\n${formatTranscript(turns, ctx)}\n\nScore this session.`,
-    schema: ScorecardReport,
-    schemaName: "scorecard",
-    tier: "eval",
-    maxTokens: 6000,
-  });
+  const tags = sessionTags(ctx);
+  const report = await traceAgent(
+    "evaluator",
+    { sessionId: ctx.id ?? "unknown", input: `${turns.length} turns`, tags },
+    () =>
+      generateObject({
+        provider: p,
+        system: evaluatorSystemPrompt(ctx),
+        prompt: `Full transcript:\n${formatTranscript(turns, ctx)}\n\nScore this session.`,
+        schema: ScorecardReport,
+        schemaName: "scorecard",
+        tier: "eval",
+        maxTokens: 6000,
+      }),
+    (r, span) =>
+      submitScores(
+        span,
+        {
+          readiness_score: r.overallScore,
+          discovery_depth: r.categories.discoveryDepth.score,
+          objection_handling: r.categories.objectionHandling.score,
+          value_articulation: r.categories.valueArticulation.score,
+          conciseness_pacing: r.categories.concisenessPacing.score,
+        },
+        tags,
+      ),
+  );
   return { report, model: p.model("eval") };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { datadogRum } from "@datadog/browser-rum";
 import type { CoachHint } from "@/lib/schemas";
 import { speak } from "@/lib/speech";
 import { useRouter } from "next/navigation";
@@ -82,6 +83,7 @@ export function SessionArena({
           message,
         });
         setMessages((m) => [...m, reply]);
+        datadogRum.addAction("buyer_replied", { practice_session_id: session.id });
         if (voiceOutRef.current) speak(reply.content, session.speechLang);
         void fetchHint();
       } catch (err) {
@@ -116,6 +118,12 @@ export function SessionArena({
     setError(null);
     try {
       await post("/api/evaluate", { sessionId: session.id });
+      datadogRum.addAction("practice_session_scored", {
+        practice_session_id: session.id,
+        framework: session.framework,
+        difficulty: session.difficulty,
+        turns: messages.length,
+      });
       router.push(`/scorecard/${session.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
