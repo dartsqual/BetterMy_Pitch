@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// One practice run: the configuration chosen on the setup screen.
+model Session {
+  id           String     @id @default(cuid())
+  createdAt    DateTime   @default(now())
+  endedAt      DateTime?
+  status       String     @default("active") // active | scored
+  title        String
+  product      String
+  personaId    String
+  personaName  String
+  personaBrief String
+  difficulty   String // cooperative | skeptical | hostile
+  framework    String // meddic | spin | challenger | custom
+  customFlow   String?
+  language     String     @default("en")
+  messages     Message[]
+  scorecard    Scorecard?
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String // seller | buyer
+  content   String
+  /// Live coach hint generated after this buyer turn (JSON array of strings).
+  coachHint String?
+
+  @@index([sessionId, createdAt])
+}
+
+model Scorecard {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  sessionId String   @unique
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  overall   Int
+  /// Full evaluator JSON (categories, key moments, rewrites, summary).
+  report    String
+  model     String
+}
+
+/// Reusable custom buyer personas saved from the configurator.
+model PersonaTemplate {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  name      String
+  title     String
+  brief     String
+}
