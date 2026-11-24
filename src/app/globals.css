@@ -47,6 +47,33 @@
   --color-coach-soft: var(--coach-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Meeting room body language */
+  --animate-talk: talk 0.6s ease-in-out 3;
+  --animate-nod: nod 0.5s ease-in-out 3;
+  --animate-shake: shake 0.4s ease-in-out 2;
+
+  @keyframes talk {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-4px) scale(1.06); }
+  }
+  @keyframes nod {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(5px); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px) rotate(-4deg); }
+    75% { transform: translateX(4px) rotate(4deg); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-talk,
+  .animate-nod,
+  .animate-shake {
+    animation: none;
+  }
 }
 
 body {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { toBuyerMessages } from "@/lib/agents";
-import { buyerSystemPrompt, evaluatorSystemPrompt, formatTranscript } from "@/lib/prompts";
+import { committeeRound } from "@/lib/agents";
+import { initialState, MAX_SWING } from "@/lib/committee";
+import type { LLMProvider } from "@/lib/llm/types";
+import { buyerSystemPrompt, evaluatorSystemPrompt, formatTranscript, MUST_SPEAK } from "@/lib/prompts";
 
 const ctx = {
   product: "Acme Observability",
@@ -32,15 +34,51 @@ describe("prompts", () => {
   });
 });
 
-describe("toBuyerMessages", () => {
-  it("starts with a user turn and alternates roles", () => {
-    const msgs = toBuyerMessages([
-      { role: "buyer", content: "Hi, what do you have?" },
-      { role: "seller", content: "Thanks for the time." },
-      { role: "seller", content: "Can I ask about your setup?" },
+describe("committeeRound", () => {
+  const members = [
+    { id: "primary", name: "Dana Reyes", title: "VP Eng", brief: "Skeptical.", emoji: "🛠" },
+    { id: "colleague-1", name: "Tomás Alvarez", title: "Security", brief: "Blocks hand-wavy answers.", emoji: "🔐" },
+  ];
+  const states = {
+    primary: initialState("primary", "skeptical"),
+    "colleague-1": initialState("colleague-1", "skeptical"),
+  };
+
+  function fakeProvider(replies: object[]): LLMProvider & { prompts: string[] } {
+    const prompts: string[] = [];
+    return {
+      name: "fake",
+      prompts,
+      model: () => "fake",
+      chat: async () => "",
+      json: async ({ prompt }) => {
+        prompts.push(prompt);
+        return JSON.stringify(replies.shift());
+      },
+    };
+  }
+
+  it("lets the addressed member answer first, shares the round and clamps state swings", async () => {
+    const p = fakeProvider([
+      { say: "SOC 2 first, please.", addressedTo: "seller", action: "pushes_back", interest: 0, trust: 40, reasoning: "Vague." },
+      { say: "", addressedTo: "Tomás", action: "nods", interest: 50, trust: 45, reasoning: "Fair point." },
     ]);
-    expect(msgs[0].role).toBe("user");
-    expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
-    expect(msgs[2].content).toContain("Can I ask about your setup?");
+    const results = await committeeRound({
+      ctx,
+      members,
+      states,
+      turns: [{ role: "seller", content: "Tomás, how do you review vendors?" }],
+      sellerText: "Tomás, how do you review vendors?",
+      provider: p,
+    });
+    expect(results.map((r) => r.member.id)).toEqual(["colleague-1", "primary"]);
+    expect(p.prompts[0]).toContain(MUST_SPEAK);
+    expect(p.prompts[1]).not.toContain(MUST_SPEAK);
+    // The second member sees what the first one said in the same round.
+    expect(p.prompts[1]).toContain("SOC 2 first, please.");
+    // 45 → 0 is clamped to the maximum swing.
+    expect(results[0].decision.interest).toBe(45 - MAX_SWING);
+    expect(results[1].decision.say).toBe("");
+    expect(results[1].decision.addressedTo).toBe("Tomás");
   });
 });
