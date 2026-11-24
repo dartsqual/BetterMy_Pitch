@@ -111,9 +111,27 @@ src/lib/i18n/                   UI translations (en, pt) + locale cookie helpers
 tests/                          Vitest suites
 ```
 
+## Analytics with Bruin
+
+The app keeps SQLite as its operational store. On the VM, `bmp-sync` copies it every 5 minutes into a Postgres database (`bmp`, schema `app`), and the Bruin pipeline in `bruin/` builds analysis tables in schema `analytics`:
+
+| Model | What it answers |
+|---|---|
+| `analytics.session_summary` | One row per session: persona, difficulty, framework, turns, coach hints, duration, readiness and category scores |
+| `analytics.daily_practice` | Practice volume and readiness trend per day |
+| `analytics.scenario_performance` | Where sellers struggle: average scores by persona, difficulty, framework and language |
+| `analytics.committee_dynamics` | Buying-committee interest/trust movement and buying signals per member |
+
+Bruin Cloud setup:
+1. Allow Bruin Cloud to reach Postgres on port 5432 (TLS is required for external connections). Bruin does not publish egress IPs; ask Bruin for a dedicated IP to allowlist, or open 5432 knowingly.
+2. **Connections → New connection → Postgres**, name `bettermy-pg`: host = VM IP, port 5432, database `bmp`, user `bruin`, password = `BRUIN_PASSWORD` from `/opt/bmp/pg.env` on the VM, SSL mode `require`.
+3. **Team settings → Projects → New project**: connect this GitHub repository, then enable the `bettermy-analytics` pipeline under **Catalog → Pipelines**.
+4. For the AI analyst: **AI → Settings → Connection Sets**, add the same Postgres connection.
+
+The `bruin` role can read `app.*` and write only `analytics.*`.
+
 ## Roadmap
 
-- **Bruin analytics:** ingest sessions and scorecards into a warehouse with a [Bruin](https://getbruin.com) pipeline, for team-level dashboards (score trends per rep, persona and objection type). Moving `DATABASE_URL` to Postgres makes that a direct ingestion.
 - Streaming buyer replies, and auth for multi-user teams.
 - PDF and PPTX deck upload as product context.
 - LLM observability: tracing the three agents and scoring with Datadog LLM Observability.
