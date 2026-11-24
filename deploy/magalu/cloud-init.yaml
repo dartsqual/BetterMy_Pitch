@@ -1,0 +1,10 @@
+#cloud-config
+# Ubuntu 24.04 on Magalu Cloud: Docker + base tools. No secrets here.
+package_update: true
+packages: [git, ca-certificates, curl, rsync]
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - usermod -aG docker ubuntu
+  - mkdir -p /opt/bmp/src /opt/datadog-agent/run
+  - chown -R ubuntu:ubuntu /opt/bmp
+  - touch /var/lib/cloud/instance/bmp-ready

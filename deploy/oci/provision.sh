@@ -7,7 +7,7 @@ set -euo pipefail
 OCI="oci --auth security_token --profile DEFAULT"
 TENANCY=${TENANCY:-ocid1.tenancy.oc1..aaaaaaaa5goqwlxbleglovuge2qe5bez73ghz7gznkiksbid73kvq3yomcta}
 OCPUS=${OCPUS:-4}; MEM=${MEM:-24}; NAME=${NAME:-oci-bmp-01}
-MYIP=${MYIP:-$(curl -fsS https://api.ipify.org)}
+MYIP=${MYIP:-$(curl -4 -fsS --noproxy '*' https://api.ipify.org)}
 SSH_PUB=${SSH_PUB:-$HOME/.ssh/id_ed25519.pub}
 DIR=$(cd "$(dirname "$0")" && pwd)
 q(){ $OCI "$@" --raw-output; }
