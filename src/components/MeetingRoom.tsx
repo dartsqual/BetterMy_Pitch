@@ -2,6 +2,7 @@
 
 import {
   ACTION_ICON,
+  ADAPTATION_ICON,
   currentStates,
   firstName,
   hasLeft,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/committee";
 import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
-import { DoorOpen, Handshake, Loader2 } from "lucide-react";
+import { Brain, DoorOpen, Handshake, Loader2 } from "lucide-react";
 import type { ChatMessage } from "./ChatArena";
 
 /**
@@ -27,6 +28,7 @@ export function MeetingRoom({
   messages,
   reacting,
   meetingOver,
+  reveal,
 }: {
   members: Member[];
   difficulty: string;
@@ -34,6 +36,8 @@ export function MeetingRoom({
   messages: ChatMessage[];
   reacting: boolean;
   meetingOver: boolean;
+  /** Show private whispers (follows the decision log's reveal toggle). */
+  reveal: boolean;
 }) {
   const { t } = useI18n();
   const states = currentStates(members, difficulty, decisions);
@@ -42,6 +46,7 @@ export function MeetingRoom({
   const latestRound = decisions.length ? decisions[decisions.length - 1].round : -1;
   const lastBuyer = [...messages].reverse().find((m) => m.role === "buyer");
   const ready = members.filter((m) => states[m.id].action === "ready_to_buy");
+  const adaptation = decisions.length ? decisions[decisions.length - 1].adaptation : "steady";
 
   return (
     <section
@@ -79,6 +84,7 @@ export function MeetingRoom({
                 state={states[m.id]}
                 delta={changedThisRound && d ? { interest: d.interest - d.prevInterest, trust: d.trust - d.prevTrust } : null}
                 speaking={!reacting && lastBuyer?.speaker === m.id}
+                reveal={reveal}
                 lastLine={[...messages].reverse().find((x) => x.role === "buyer" && x.speaker === m.id) ?? null}
               />
             );
@@ -86,6 +92,11 @@ export function MeetingRoom({
         </div>
       </div>
 
+      {!meetingOver && adaptation !== "steady" && (
+        <p className="mt-3 flex items-center gap-2 rounded-lg bg-accent-soft p-2.5 text-sm text-accent" aria-live="polite">
+          <span aria-hidden>{ADAPTATION_ICON[adaptation]}</span> {t.adapt[adaptation]}
+        </p>
+      )}
       {meetingOver ? (
         <p className="mt-3 flex items-center gap-2 rounded-lg bg-bad/10 p-2.5 text-sm text-bad">
           <DoorOpen className="size-4 shrink-0" /> {t.room.meetingOver}
@@ -122,6 +133,7 @@ function Seat({
   delta,
   speaking,
   lastLine,
+  reveal,
 }: {
   member: Member;
   members: Member[];
@@ -129,6 +141,7 @@ function Seat({
   delta: { interest: number; trust: number } | null;
   speaking: boolean;
   lastLine: ChatMessage | null;
+  reveal: boolean;
 }) {
   const { t } = useI18n();
   const left = hasLeft(state);
@@ -184,12 +197,31 @@ function Seat({
       </div>
 
       <div className="min-w-0">
-        <div className="truncate text-sm font-semibold">{member.name}</div>
+        <div className="flex items-center justify-center gap-1 truncate text-sm font-semibold">
+          {member.name}
+          {member.memory && (
+            <span
+              className="inline-flex items-center gap-0.5 rounded-full bg-coach-soft px-1.5 text-[10px] font-medium text-coach"
+              title={`${member.memory.sessions} ${t.room.remembersTitle}${member.memory.lastReason ? `: “${member.memory.lastReason}”` : ""}`}
+            >
+              <Brain className="size-3" aria-hidden /> {t.room.remembers}
+            </span>
+          )}
+        </div>
         <div className="truncate text-[11px] text-muted">{member.title}</div>
         <div className="text-[11px] font-medium" aria-live="polite">
           {left ? t.room.left : t.actions[state.action]}
         </div>
       </div>
+
+      {reveal && state.whisper && !left && (
+        <div
+          className="max-w-full rounded-lg border border-dashed border-coach/50 px-2 py-0.5 text-[10px] italic leading-snug text-coach"
+          title={t.room.whisper}
+        >
+          🤫 {state.whisper}
+        </div>
+      )}
 
       <div className="w-full max-w-40 space-y-1">
         <Meter label={t.room.interest} value={state.interest} delta={delta?.interest} />
