@@ -4,6 +4,14 @@
 
 Built for sales engineers, founders and account executives who want reps before the real call.
 
+## Demo
+
+[![BetterMy Pitch demo: a 3-buyer committee reacts in a 3D meeting room](docs/demo/preview.gif)](docs/demo/bettermy-pitch-demo.mp4)
+
+**[Watch the 86-second demo video (MP4)](docs/demo/bettermy-pitch-demo.mp4).** A seller sets up a pitch, meets a 3-buyer committee that remembers their last meeting, asks a sharp question, rambles (the committee cuts in and loses interest), recovers with a number, checks the decision log and the private whispers, and ends with the committee's vote and an evidence-checked scorecard.
+
+It was recorded with the offline mock provider, so the buyers' lines are canned. Re-record it against a live model with [`scripts/record-demo.mjs`](scripts/record-demo.mjs).
+
 ## Features
 
 | | |
