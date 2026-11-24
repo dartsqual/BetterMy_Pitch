@@ -163,7 +163,7 @@ The app keeps SQLite as its operational store. On the VM, `bmp-sync` copies it e
 | `analytics.committee_dynamics` | Buying-committee interest/trust movement and buying signals per member |
 
 Bruin Cloud setup:
-1. Allow Bruin Cloud to reach Postgres on port 5432 (TLS is required for external connections). Bruin does not publish egress IPs; ask Bruin for a dedicated IP to allowlist, or open 5432 knowingly.
+1. Allow Bruin Cloud to reach Postgres on port 5432 (TLS is required for external connections). In production the Magalu security group `bmp-sg` allows 5432 only from Bruin's observed egress IP `134.209.204.234/32`. Bruin does not guarantee that IP; if it changes, the Datadog monitor "Bruin Cloud has not connected to Postgres" fires and the rule must be updated (or ask Bruin for a dedicated IP).
 2. **Connections → New connection → Postgres**, name `bettermy-pg`: host = VM IP, port 5432, database `bmp`, user `bruin`, password = `BRUIN_PASSWORD` from `/opt/bmp/pg.env` on the VM, SSL mode `require`.
 3. **Team settings → Projects → New project**: connect this GitHub repository, then enable the `bettermy-analytics` pipeline under **Catalog → Pipelines**.
 4. For the AI analyst: **AI → Settings → Connection Sets**, add the same Postgres connection.
