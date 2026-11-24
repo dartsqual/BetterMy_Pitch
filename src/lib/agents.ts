@@ -3,6 +3,12 @@
 import { clampSwing, firstName, speakingOrder, type Member, type MemberState } from "./committee";
 import { generateObject, getProvider, type LLMProvider } from "./llm";
 import { submitScores, traceAgent } from "./observability";
+
+// Reasoning models (e.g. free OpenRouter models) spend part of the budget
+// "thinking" before answering, so the limits are generous and configurable.
+// Reply length is controlled by the prompts, not by these caps.
+const CHAT_MAX_TOKENS = Number(process.env.LLM_CHAT_MAX_TOKENS) || 4000;
+const EVAL_MAX_TOKENS = Number(process.env.LLM_EVAL_MAX_TOKENS) || 16000;
 import {
   buyerRoundPrompt,
   buyerSystemPrompt,
@@ -74,7 +80,7 @@ export async function committeeRound(args: {
           schema: BuyerDecision,
           schemaName: "buyer_decision",
           tier: "chat",
-          maxTokens: 500,
+          maxTokens: CHAT_MAX_TOKENS,
         }),
     );
 
@@ -111,7 +117,7 @@ export async function coachHint(
       schema: CoachHint,
       schemaName: "coach_hint",
       tier: "chat",
-      maxTokens: 400,
+      maxTokens: CHAT_MAX_TOKENS,
     }),
   );
 }
@@ -135,7 +141,7 @@ export async function evaluateSession(
         schema: ScorecardReport,
         schemaName: "scorecard",
         tier: "eval",
-        maxTokens: 6000,
+        maxTokens: EVAL_MAX_TOKENS,
       }),
     (r, span) =>
       submitScores(
