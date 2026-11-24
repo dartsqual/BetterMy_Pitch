@@ -149,6 +149,8 @@ services:
       postgres:
         condition: service_healthy
     command: ["node", "scripts/sync-analytics.mjs"]
+    healthcheck:
+      disable: true
     env_file: /opt/bmp/sync.env        # PGPASSWORD for role bmp_sync (chmod 600)
     environment:
       DATABASE_URL: file:/data/bmp.db

@@ -23,7 +23,9 @@ const json = (text) => {
 };
 
 const DDL = `
-create schema if not exists app;
+do $$ begin
+  if not exists (select 1 from pg_namespace where nspname = 'app') then create schema app; end if;
+end $$;
 create table if not exists app.sessions (
   id text primary key, created_at timestamptz not null, ended_at timestamptz, status text not null,
   title text not null, product text not null, persona_id text not null, persona_name text not null,
