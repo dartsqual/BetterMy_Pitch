@@ -13,7 +13,8 @@ Built for sales engineers, founders and account executives who want reps before 
 | **Whispers (agents coordinate)** | Each buyer can pass a private note to colleagues every round ("He dodged pricing twice, push on it"). Colleagues read the notes before their next move. Whispers appear as dashed bubbles in the room and in the decision log when reasons are shown. |
 | **Adaptive pressure** | Before each round, the committee adapts to how the seller is doing. Rambling (over 120 words) makes them cut in and ask for the short version. Doing well (high interest and trust) makes them raise the bar with harder questions. Losing the room makes them offer one clear opening to recover. A banner in the room shows the current mode. |
 | **Memory across runs** | Built-in personas remember earlier scored meetings with this seller: how many, where their interest and trust ended, their last private thought, their vote, and the seller's weakest category. They bring it up ("Last time you couldn't tell me…"), and their starting trust moves up to ±10 points depending on how the last meeting ended. A 🧠 "Remembers you" badge shows on their seat. |
-| **Meeting room** | Every decision shows on screen: each buyer's posture and body language (leaning in, arms crossed, checking phone, ready for a next step), animated interest and trust meters with the change from the last round, and who they are talking to. A buyer whose interest collapses can leave the meeting. If everyone leaves, the call is over. |
+| **3D meeting room** | The committee sits across a boardroom table from you (the camera), in three.js. Each decision is acted out: leaning in, taking notes on a notepad, nodding, looking at a phone, crossing arms, shaking their head, turning to the colleague they address, and standing up and walking out the door. A floor ring shows interest (green / amber / red) and brightens while they talk. Speech and whisper bubbles float above each head; name, action and interest/trust meters sit on the table. A **3D / 2D** switch keeps the flat view; the room falls back to 2D if WebGL can't start. |
+| **Meeting room (2D)** | Every decision shows on screen: each buyer's posture and body language (leaning in, arms crossed, checking phone, ready for a next step), animated interest and trust meters with the change from the last round, and who they are talking to. A buyer whose interest collapses can leave the meeting. If everyone leaves, the call is over. |
 | **Decision log** | A tab next to the coach lists every buyer's move per round, including silent ones: action, interest and trust before → after, and a private one-line reason ("Marcus crossed his arms because the seller quoted price before asking about budget"). Reasons can be hidden for harder practice. |
 | **Roleplay arena** | Split screen. **Left:** the buyer simulator stays strictly in character, asks hard technical and commercial questions and raises realistic objections. **Right:** the live coach whisperer reads each buyer turn and suggests 1–2 tactical pivots. |
 | **Voice practice** | Browser Web Speech API: dictate your answers with the mic (optionally auto-sent) and have the buyers' replies read aloud, with a different voice (or pitch) per buyer. Needs Chrome or Edge; Safari support is partial. Text chat always works. |
@@ -56,6 +57,14 @@ Prisma + SQLite        src/lib/agents.ts ── src/lib/prompts.ts (Buyer / Coac
 
 **Model tiers.** Two tiers. A fast `chat` model handles buyer and coach turns, because latency matters mid-conversation. A stronger `eval` model writes the scorecard.
 
+## Screenshots
+
+| 3D meeting room | Losing the room (phones out, red rings) |
+|---|---|
+| ![3D meeting room](docs/screenshots/meeting-room-3d.png) | ![Committee losing interest](docs/screenshots/meeting-room-3d-losing.png) |
+
+Committee verdict and scorecard: [docs/screenshots/scorecard-verdict.png](docs/screenshots/scorecard-verdict.png). Screenshots use the offline mock provider.
+
 ## Hackathon checklist
 
 How BetterMy Pitch meets the [Multiplayer AI hackathon](https://crewbasecollective.com/aim-hack-visual/tracks.html) rules (Track 03, Grow with Agents):
@@ -72,6 +81,7 @@ How BetterMy Pitch meets the [Multiplayer AI hackathon](https://crewbasecollecti
 | Agents adapt to the human's performance | Adaptive pressure (raise the bar, interrupt, ease off) plus per-buyer interest and trust |
 | A clear result with evidence-based feedback | The committee verdict (advanced / stalled / lost) with quote-verified objections, plus the scorecard |
 | Booster: memory that changes decisions | Memory across runs changes starting trust and what buyers ask about |
+| Booster: 3D | The 3D meeting room (three.js), default view |
 | Booster: voice | A different browser voice (or pitch) per buyer |
 
 ## Getting started
@@ -121,7 +131,7 @@ src/app/page.tsx                Landing + configurator + history/progress
 src/app/session/[id]/page.tsx   Live roleplay + coach
 src/app/scorecard/[id]/page.tsx Post-session analytics & rewrites
 src/app/api/{sessions,roleplay,hint,evaluate}/route.ts
-src/components/                 PersonaSelector, SessionConfigurator, SessionArena, MeetingRoom,
+src/components/                 PersonaSelector, SessionConfigurator, SessionArena, MeetingRoom, Room3D,
                                 ChatArena, LiveCoachSidebar, DecisionLog, ScorecardView, ProgressChart, ui
 src/lib/committee.ts            Committee members, state, speaking order, swing clamping
 src/lib/evidence.ts             Matches scorecard quotes to transcript lines

@@ -14,7 +14,34 @@ import {
 import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { Brain, DoorOpen, Handshake, Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useSyncExternalStore } from "react";
 import type { ChatMessage } from "./ChatArena";
+
+// three.js is only loaded in the browser, and only when the 3D view is shown.
+const Room3D = dynamic(() => import("./Room3D").then((m) => m.Room3D), {
+  ssr: false,
+  loading: () => <div className="h-80 animate-pulse rounded-xl bg-accent-soft/40" />,
+});
+
+// 2D/3D preference, persisted in localStorage. 3D is the default; the room
+// falls back to 2D for good if WebGL can't start.
+const VIEW_KEY = "bmp-room-view";
+type View = "2d" | "3d";
+const viewListeners = new Set<() => void>();
+function subscribeView(cb: () => void) {
+  viewListeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    viewListeners.delete(cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+const readView = (): View => (localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d");
+function writeView(view: View) {
+  localStorage.setItem(VIEW_KEY, view);
+  viewListeners.forEach((l) => l());
+}
 
 /**
  * The meeting room: every committee member sits at the table and every
@@ -40,6 +67,7 @@ export function MeetingRoom({
   reveal: boolean;
 }) {
   const { t } = useI18n();
+  const view = useSyncExternalStore(subscribeView, readView, () => "2d" as View);
   const states = currentStates(members, difficulty, decisions);
   const deltas = withDeltas(members, difficulty, decisions);
   const lastDelta = new Map(deltas.map((d) => [d.memberId, d]));
@@ -54,7 +82,25 @@ export function MeetingRoom({
       className="shrink-0 overflow-hidden rounded-2xl border border-border bg-card p-4"
     >
       <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-xs uppercase tracking-wide text-muted">{t.room.title}</div>
+        <div className="flex items-center gap-3">
+          <div className="text-xs uppercase tracking-wide text-muted">{t.room.title}</div>
+          <div role="group" aria-label={t.room.view} className="flex rounded-md border border-border text-[11px]">
+            {(["3d", "2d"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => writeView(v)}
+                className={cn(
+                  "px-2 py-0.5 font-medium uppercase",
+                  view === v ? "bg-accent text-white" : "text-muted hover:text-foreground",
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
         {reacting ? (
           <div className="flex items-center gap-1.5 text-xs text-muted">
             <Loader2 className="size-3.5 animate-spin" /> {t.room.reacting}
@@ -64,6 +110,29 @@ export function MeetingRoom({
         )}
       </div>
 
+      {view === "3d" ? (
+        <Room3D
+          members={members}
+          states={states}
+          deltas={Object.fromEntries(
+            members.map((m) => {
+              const d = lastDelta.get(m.id);
+              const changed = decisions.some((x) => x.memberId === m.id && x.round === latestRound);
+              return [m.id, changed && d ? { interest: d.interest - d.prevInterest, trust: d.trust - d.prevTrust } : null];
+            }),
+          )}
+          speakingId={!reacting ? (lastBuyer?.speaker ?? null) : null}
+          lastLines={Object.fromEntries(
+            members.flatMap((m) => {
+              const line = [...messages].reverse().find((x) => x.role === "buyer" && x.speaker === m.id);
+              return line ? [[m.id, line.content]] : [];
+            }),
+          )}
+          reveal={reveal}
+          t={t}
+          onError={() => writeView("2d")}
+        />
+      ) : (
       <div className="relative">
         {/* The table */}
         <div className="absolute inset-x-6 top-1/2 h-10 -translate-y-1/2 rounded-full bg-accent-soft" aria-hidden />
@@ -91,6 +160,7 @@ export function MeetingRoom({
           })}
         </div>
       </div>
+      )}
 
       {!meetingOver && adaptation !== "steady" && (
         <p className="mt-3 flex items-center gap-2 rounded-lg bg-accent-soft p-2.5 text-sm text-accent" aria-live="polite">

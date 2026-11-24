@@ -83,6 +83,7 @@ const en = {
     whisper: "Whispered to colleagues",
     remembers: "Remembers you",
     remembersTitle: "earlier meetings with you",
+    view: "Room view",
   },
   adapt: {
     steady: "The committee is listening.",
@@ -292,6 +293,7 @@ const pt: Dictionary = {
     whisper: "Cochichou com os colegas",
     remembers: "Lembra de você",
     remembersTitle: "reuniões anteriores com você",
+    view: "Visualização da sala",
   },
   adapt: {
     steady: "O comitê está ouvindo.",
