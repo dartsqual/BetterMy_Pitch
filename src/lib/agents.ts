@@ -1,44 +1,23 @@
-// The three agents: Buyer (roleplay), Live Coach (hints) and Evaluator (scorecard).
-import { generateObject, getProvider, type ChatMessage, type LLMProvider } from "./llm";
+// The agents: the buying committee (one buyer agent per member), the Live
+// Coach (hints) and the Evaluator (scorecard).
+import { clampSwing, firstName, speakingOrder, type Member, type MemberState } from "./committee";
+import { generateObject, getProvider, type LLMProvider } from "./llm";
+import { submitScores, traceAgent } from "./observability";
 import {
-  buyerOpeningInstruction,
+  buyerRoundPrompt,
   buyerSystemPrompt,
   coachSystemPrompt,
+  committeeStateLines,
   evaluatorSystemPrompt,
   formatTranscript,
   type SessionContext,
   type Turn,
 } from "./prompts";
-import { submitScores, traceAgent } from "./observability";
-import { CoachHint, ScorecardReport } from "./schemas";
+import { BuyerDecision, CoachHint, ScorecardReport } from "./schemas";
 
-/** Map transcript turns to chat messages from the buyer model's point of view. */
-export function toBuyerMessages(turns: Turn[]): ChatMessage[] {
-  // Providers require the conversation to start with a user turn, so the
-  // opening instruction is always the first message.
-  const messages: ChatMessage[] = [{ role: "user", content: buyerOpeningInstruction() }];
-  for (const turn of turns) {
-    const role = turn.role === "seller" ? "user" : "assistant";
-    const last = messages[messages.length - 1];
-    if (last.role === role) last.content += `\n\n${turn.content}`;
-    else messages.push({ role, content: turn.content });
-  }
-  return messages;
-}
+export type RoundResult = { member: Member; decision: BuyerDecision };
 
-export async function buyerReply(ctx: SessionContext, turns: Turn[], provider?: LLMProvider) {
-  const p = provider ?? getProvider();
-  const lastSeller = [...turns].reverse().find((t) => t.role === "seller")?.content ?? "(opening)";
-  const reply = await traceAgent("buyer", { sessionId: ctx.id ?? "unknown", input: lastSeller, tags: sessionTags(ctx) }, () =>
-    p.chat({
-      system: buyerSystemPrompt(ctx),
-      messages: toBuyerMessages(turns),
-      tier: "chat",
-      maxTokens: 350,
-    }),
-  );
-  return reply || "Sorry — could you say that again?";
-}
+const FALLBACK_LINE = "Sorry, could you say that again?";
 
 function sessionTags(ctx: SessionContext) {
   return {
@@ -49,12 +28,85 @@ function sessionTags(ctx: SessionContext) {
   };
 }
 
-export async function coachHint(ctx: SessionContext, turns: Turn[], provider?: LLMProvider) {
+/**
+ * One round of the meeting. Members decide one after another, so each sees
+ * what colleagues said earlier in the same round and can react to it. The
+ * first member in speaking order must answer; the others may stay silent.
+ * Each member's decision is its own `bmp.buyer` LLM Observability span.
+ */
+export async function committeeRound(args: {
+  ctx: SessionContext;
+  members: Member[];
+  states: Record<string, MemberState>;
+  turns: Turn[];
+  sellerText?: string;
+  provider?: LLMProvider;
+}): Promise<RoundResult[]> {
+  const { ctx, members, sellerText, provider } = args;
+  const states = { ...args.states };
+  const turns = [...args.turns];
+  const order = speakingOrder(members, states, sellerText);
+  const opening = turns.length === 0;
+  const results: RoundResult[] = [];
+
+  for (const [i, member] of order.entries()) {
+    const colleagues = members.filter((m) => m.id !== member.id);
+    const raw = await traceAgent(
+      "buyer",
+      {
+        sessionId: ctx.id ?? "unknown",
+        input: sellerText ?? "(opening)",
+        tags: { ...sessionTags(ctx), member: member.name, member_title: member.title },
+      },
+      () =>
+        generateObject({
+          provider,
+          system: buyerSystemPrompt(ctx, member, colleagues),
+          prompt: buyerRoundPrompt({
+            ctx,
+            member,
+            turns,
+            self: states[member.id],
+            colleagues: colleagues.map((c) => ({ member: c, state: states[c.id] })),
+            opening,
+            mustSpeak: i === 0,
+          }),
+          schema: BuyerDecision,
+          schemaName: "buyer_decision",
+          tier: "chat",
+          maxTokens: 500,
+        }),
+    );
+
+    const previous = states[member.id];
+    const colleagueNames = colleagues.map((c) => firstName(c.name).toLowerCase());
+    const say = raw.say.trim() || (i === 0 ? FALLBACK_LINE : "");
+    const decision: BuyerDecision = {
+      ...raw,
+      say,
+      addressedTo: colleagueNames.includes(raw.addressedTo.trim().toLowerCase()) ? raw.addressedTo.trim() : "seller",
+      interest: clampSwing(previous.interest, raw.interest),
+      trust: clampSwing(previous.trust, raw.trust),
+    };
+
+    states[member.id] = { memberId: member.id, ...decision };
+    if (say) turns.push({ role: "buyer", content: say, speaker: member.name });
+    results.push({ member, decision });
+  }
+  return results;
+}
+
+export async function coachHint(
+  ctx: SessionContext,
+  turns: Turn[],
+  committee?: { members: Member[]; states: Record<string, MemberState> },
+  provider?: LLMProvider,
+) {
   const lastBuyer = [...turns].reverse().find((t) => t.role === "buyer")?.content ?? "";
   return traceAgent("coach", { sessionId: ctx.id ?? "unknown", input: lastBuyer, tags: sessionTags(ctx) }, () =>
     generateObject({
       provider,
-      system: coachSystemPrompt(ctx),
+      system: coachSystemPrompt(ctx, committee && committeeStateLines(committee.members, committee.states)),
       prompt: `Conversation so far:\n${formatTranscript(turns.slice(-12), ctx)}\n\nCoach the seller's next reply.`,
       schema: CoachHint,
       schemaName: "coach_hint",
@@ -64,7 +116,12 @@ export async function coachHint(ctx: SessionContext, turns: Turn[], provider?: L
   );
 }
 
-export async function evaluateSession(ctx: SessionContext, turns: Turn[], provider?: LLMProvider) {
+export async function evaluateSession(
+  ctx: SessionContext,
+  turns: Turn[],
+  committee?: { members: Member[]; states: Record<string, MemberState> },
+  provider?: LLMProvider,
+) {
   const p = provider ?? getProvider();
   const tags = sessionTags(ctx);
   const report = await traceAgent(
@@ -73,7 +130,7 @@ export async function evaluateSession(ctx: SessionContext, turns: Turn[], provid
     () =>
       generateObject({
         provider: p,
-        system: evaluatorSystemPrompt(ctx),
+        system: evaluatorSystemPrompt(ctx, committee && committeeStateLines(committee.members, committee.states)),
         prompt: `Full transcript:\n${formatTranscript(turns, ctx)}\n\nScore this session.`,
         schema: ScorecardReport,
         schemaName: "scorecard",

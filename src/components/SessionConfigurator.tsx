@@ -1,6 +1,7 @@
 "use client";
 
 import { DIFFICULTIES, FRAMEWORKS, LANGUAGES, PERSONAS } from "@/lib/catalog";
+import { MAX_COLLEAGUES } from "@/lib/committee";
 import { useI18n } from "@/lib/i18n/client";
 import { dictionaries, type Locale } from "@/lib/i18n/dictionaries";
 import { cn } from "@/lib/utils";
@@ -39,11 +40,24 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
       setPersona({ ...builtInPersona(persona.id, locale)!, name: persona.name });
     }
   }
+  const [colleagueIds, setColleagueIds] = useState<string[]>([]);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isCustomPersona = persona.id === "custom";
+  // The primary persona can't also sit in the room as a colleague.
+  const colleagues = colleagueIds.filter((id) => id !== persona.id);
+
+  function toggleColleague(id: string) {
+    setColleagueIds((ids) =>
+      ids.includes(id)
+        ? ids.filter((x) => x !== id)
+        : colleagues.length < MAX_COLLEAGUES
+          ? [...ids.filter((x) => x !== persona.id), id]
+          : ids,
+    );
+  }
 
   async function start(e: React.FormEvent) {
     e.preventDefault();
@@ -59,6 +73,7 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
           personaName: persona.name,
           personaTitle: persona.title,
           personaBrief: persona.brief,
+          colleagues: colleagues.map((id) => builtInPersona(id, locale)!),
           difficulty,
           framework,
           customFlow: framework === "custom" ? customFlow : undefined,
@@ -99,6 +114,31 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
             {t.config.saveTemplate}
           </label>
         )}
+        <div className="space-y-2 border-t border-border pt-3">
+          <div className="text-sm font-medium">{t.config.colleagues}</div>
+          <p className="text-xs text-muted">{t.config.colleaguesHint}</p>
+          <div className="flex flex-wrap gap-2">
+            {PERSONAS.filter((p) => p.id !== persona.id).map((p) => {
+              const on = colleagues.includes(p.id);
+              const full = !on && colleagues.length >= MAX_COLLEAGUES;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={full}
+                  onClick={() => toggleColleague(p.id)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40",
+                    on ? "border-accent bg-accent-soft text-accent" : "border-border hover:border-accent/50",
+                  )}
+                >
+                  <span aria-hidden>{p.emoji}</span> {p.name} · {t.personas[p.id]?.title ?? p.title}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </Card>
 
       <Card className="space-y-4">

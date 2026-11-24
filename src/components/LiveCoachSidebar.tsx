@@ -25,7 +25,7 @@ export function LiveCoachSidebar({
   const earlier = hints.slice(0, -1).reverse();
 
   return (
-    <aside className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card lg:min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-border p-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted">{t.coach.title}</div>
@@ -83,6 +83,6 @@ export function LiveCoachSidebar({
           </div>
         )}
       </div>
-    </aside>
+    </div>
   );
 }

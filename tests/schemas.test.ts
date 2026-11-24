@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CoachHint, CreateSessionInput, ScorecardReport } from "@/lib/schemas";
+import { BuyerDecision, CoachHint, CreateSessionInput, ScorecardReport } from "@/lib/schemas";
 import { mockProvider } from "@/lib/llm/mock";
 
 const validSession = {
@@ -40,6 +40,10 @@ describe("LLM output schemas", () => {
     expect(ScorecardReport.parse(card).overallScore).toBeGreaterThanOrEqual(0);
     const hint = JSON.parse(await p.json({ system: "", prompt: "", schema: {}, schemaName: "coach_hint", tier: "chat" }));
     expect(CoachHint.parse(hint).tips.length).toBeGreaterThan(0);
+    const decision = JSON.parse(
+      await p.json({ system: "You are Dana Reyes, a real buyer", prompt: "", schema: {}, schemaName: "buyer_decision", tier: "chat" }),
+    );
+    expect(BuyerDecision.parse(decision).interest).toBeGreaterThanOrEqual(0);
   });
 
   it("rejects out-of-range scores", () => {

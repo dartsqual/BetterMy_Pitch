@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { DIFFICULTY_IDS, FRAMEWORK_IDS, LANGUAGE_IDS } from "./catalog";
+import { MAX_COLLEAGUES } from "./committee";
 
 // ── API inputs ───────────────────────────────────────────────────
+
+const ColleagueInput = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1).max(120),
+  brief: z.string().trim().min(10).max(2000),
+});
 
 export const CreateSessionInput = z
   .object({
@@ -10,6 +18,7 @@ export const CreateSessionInput = z
     personaName: z.string().trim().min(1).max(80),
     personaTitle: z.string().trim().min(1).max(120),
     personaBrief: z.string().trim().min(10).max(2000),
+    colleagues: z.array(ColleagueInput).max(MAX_COLLEAGUES).default([]),
     difficulty: z.enum(DIFFICULTY_IDS),
     framework: z.enum(FRAMEWORK_IDS),
     customFlow: z.string().trim().max(3000).optional(),
@@ -19,7 +28,14 @@ export const CreateSessionInput = z
   .refine((v) => v.framework !== "custom" || (v.customFlow?.length ?? 0) >= 10, {
     message: "Describe your custom demo flow",
     path: ["customFlow"],
-  });
+  })
+  .refine(
+    (v) => {
+      const names = [v.personaName, ...v.colleagues.map((c) => c.name)].map((n) => n.toLowerCase());
+      return new Set(names).size === names.length;
+    },
+    { message: "Each buyer in the meeting needs a different name", path: ["colleagues"] },
+  );
 export type CreateSessionInput = z.infer<typeof CreateSessionInput>;
 
 export const RoleplayInput = z.object({
@@ -45,6 +61,44 @@ export const CoachHint = z.object({
 export type CoachHint = z.infer<typeof CoachHint>;
 
 const score = z.number().int().min(0).max(100);
+
+/** Visible body language. Every decision is rendered as one of these on screen. */
+export const BUYER_ACTIONS = [
+  "leans_in",
+  "takes_notes",
+  "nods",
+  "neutral",
+  "checks_phone",
+  "crosses_arms",
+  "pushes_back",
+  "whispers_to_colleague",
+  "ready_to_buy",
+  "leaves_meeting",
+] as const;
+export type BuyerAction = (typeof BUYER_ACTIONS)[number];
+
+/** One committee member's move in a round, produced by the buyer agent. */
+export const BuyerDecision = z.object({
+  say: z
+    .string()
+    .describe("What you say out loud now: 1–4 spoken sentences. Use an empty string to stay silent this round."),
+  addressedTo: z
+    .string()
+    .describe('Who you are talking to: "seller", or the first name of the colleague you address.'),
+  action: z
+    .enum(BUYER_ACTIONS)
+    .describe(
+      "Your visible body language this round. Use leaves_meeting only if you are done with this vendor; ready_to_buy only if you would agree to a concrete next step now.",
+    ),
+  interest: score.describe("Your interest in buying after this round, 0–100."),
+  trust: score.describe("How much you trust this seller after this round, 0–100."),
+  reasoning: z
+    .string()
+    .describe(
+      "Private, one sentence: why you reacted this way, citing what the seller or a colleague just said. Never shown to the seller during the call.",
+    ),
+});
+export type BuyerDecision = z.infer<typeof BuyerDecision>;
 
 export const CATEGORY_KEYS = [
   "discoveryDepth",
