@@ -100,6 +100,69 @@ services:
       - bmp-data:/data
     expose: ["3000"]
 
+  # Analytics copy of the app data for Bruin (TLS required from outside).
+  postgres:
+    image: postgres:17
+    container_name: bmp-postgres
+    restart: unless-stopped
+    env_file: /opt/bmp/pg.env          # POSTGRES_PASSWORD, SYNC_PASSWORD, BRUIN_PASSWORD (chmod 600)
+    environment:
+      POSTGRES_DB: bmp
+      POSTGRES_USER: postgres
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - log_connections=on
+    labels:
+      <<: *dd-tags
+      com.datadoghq.tags.service: bmp-postgres
+      com.datadoghq.ad.logs: '[{"source":"postgresql","service":"bmp-postgres"}]'
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - /opt/bmp/postgres-certs:/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bmp"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Copies SQLite -> Postgres (schema app) every 5 minutes.
+  sync:
+    image: bettermy-pitch:${APP_VERSION:-latest}
+    container_name: bmp-sync
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    command: ["node", "scripts/sync-analytics.mjs"]
+    env_file: /opt/bmp/sync.env        # PGPASSWORD for role bmp_sync (chmod 600)
+    environment:
+      DATABASE_URL: file:/data/bmp.db
+      PGHOST: postgres
+      PGUSER: bmp_sync
+      PGDATABASE: bmp
+      SYNC_INTERVAL_SECONDS: "300"
+    labels:
+      <<: *dd-tags
+      com.datadoghq.tags.service: bmp-sync
+      com.datadoghq.ad.logs: '[{"source":"nodejs","service":"bmp-sync"}]'
+    volumes:
+      - bmp-data:/data
+
   caddy:
     image: caddy:2
     container_name: caddy
@@ -122,5 +185,6 @@ services:
 
 volumes:
   bmp-data:
+  pg-data:
   caddy-data:
   caddy-config:

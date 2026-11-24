@@ -1,0 +1,5 @@
+name: bettermy-analytics
+schedule: hourly
+start_date: "2026-11-01"
+default_connections:
+  postgres: bettermy-pg
